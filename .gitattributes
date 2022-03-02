@@ -1,0 +1,4 @@
+data/train_2305_1931_12.npy filter=lfs diff=lfs merge=lfs -text
+data/train_mask_2305_1931.npy filter=lfs diff=lfs merge=lfs -text
+data/test_126_1931_12.npy filter=lfs diff=lfs merge=lfs -text
+data/test_mask_126_1931.npy filter=lfs diff=lfs merge=lfs -text
