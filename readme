@@ -1,0 +1,36 @@
+ToDo:
+1. build graph in pyg format
+    1.1 adj matrix
+    1.2 heterogenous
+    1.3 extend to other data sources
+2. metrics
+    2.1 classification: acc, f1
+    2.2 rank: ndcg, mrr, hit@10
+    2.3 return: sharpe ratio, irr
+3. LSTM & self-attention baseline
+4. GCN & GAT baseline
+5. RGCN baseline
+
+Analysis:
+1. temporal variability and temporal sparsity
+    1.1 node cnt/degree variation
+
+Ideas:
+1. data imputation: eg. GRU-D, attention mask
+2. LSTM gate with GNN
+3. correlation as edges (long term relationship?)
+4. gating
+5. long term vs. short term event
+    5.1 events as node feature
+    5.2 events as stock context
+6. constraints between neighbouring timestamps
+7. edges: sector, fund holding, corr, 
+
+Comp:
+1. MLP, LSTM, GCN, GAT, HAN
+2. StockRank, HyperStockGAT
+
+Writing:
+1. market efficiency hypothesis
+2. research problems and how they are solved
+3.  
