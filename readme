@@ -1,7 +1,7 @@
 ToDo:
 1. build graph in pyg format
-    1.1 adj matrix
-    1.2 heterogenous
+    //1.1 adj matrix 
+    //1.2 heterogenous
     1.3 extend to other data sources
 2. metrics
     2.1 classification: acc, f1
@@ -14,6 +14,7 @@ ToDo:
 Analysis:
 1. temporal variability and temporal sparsity
     1.1 node cnt/degree variation
+    1.2 predict newly listed stocks 
 
 Ideas:
 1. data imputation: eg. GRU-D, attention mask

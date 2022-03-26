@@ -1,40 +1,31 @@
 import os
 import torch
 import random
-import datetime
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
+from datetime import datetime
 from scipy.stats import pearsonr
 
 from utils import *
 
-def train(epoch, model, train_dataloader, criterion, optimizer, device, print_inteval, mode, mask_type='soft'):
+def train(epoch, model, train_dataloader, criterion, optimizer, device, print_inteval, input_graph=True, mask_type='soft'):
 	model.train()
 	total_steps, running_loss = 0, 0.0
 
-	# optimizer.zero_grad()
 	for i, batch in enumerate(train_dataloader):
 		optimizer.zero_grad()
-		if mode == 'mlp':
-			(x_train, y_train, mask) = batch
-			y_pred = model(x=x_train.to(device))
-
-		elif mode == 'gnn':
-			(g, x_train, y_train, mask) = batch
-			y_pred = model(g.to(device), x_train.to(device)).squeeze()
+		if input_graph:
+			(x_train, y_train, mask, g) = batch
+			y_pred = model(x_train.to(device), g.to(device))  # [batch_size, num_stocks, 1]
+		else:
+			(x_train, y_train, mask, day_idx) = batch
+			y_pred = model(x=x_train.to(device))  # [batch_size, num_stocks, 1]
 
 		if mask_type == 'strict':
 			loss = criterion(y_pred.squeeze(), y_train.flatten().to(device))
 		else:
 			mse_loss = criterion(y_pred.squeeze(), y_train[:, : ,-1].squeeze().to(device))
-			'''
-			# icloss = ic_loss(y_pred.squeeze(), y_train.squeeze().to(device))
-			icloss = 0
-			for j in range(y_pred.size(0)):
-				icloss += ic_loss(torch.masked_select(y_pred[j].squeeze(), mask[j].bool().to(device)), \
-									torch.masked_select(y_train[j].to(device).squeeze(), mask[j].bool().to(device)))
-			'''
 			mse_loss = (mse_loss*mask.float().to(device)).sum()
 			mse_loss = mse_loss / mask.sum()
 			loss = mse_loss  # - ic_loss
@@ -42,12 +33,8 @@ def train(epoch, model, train_dataloader, criterion, optimizer, device, print_in
 		assert torch.isnan(loss).any() == False
 		assert torch.isinf(loss).any() == False
 
-		# loss /= 0
 		loss.backward()
-
-		# if (i+1)%7 == 0:
 		optimizer.step()
-		# optimzer.zero_grad()
 
 		running_loss += loss.item()
 		total_steps += 1
@@ -71,31 +58,22 @@ def train(epoch, model, train_dataloader, criterion, optimizer, device, print_in
 	return running_loss / total_steps
 
 
-def evaluate(model, valid_dataloader, criterion, device, print_inteval, mode, mask_type='soft'):
+def evaluate(model, valid_dataloader, criterion, device, print_inteval, input_graph=True, mask_type='soft', eval_days=126):
 	model.eval()
 	total_steps, running_loss = 0, 0.0
 	ics = []
 
-	y_dict = {i:[] for i in range(361)}
-	pred_dict = {i:[] for i in range(361)}
+	y_dict = {i:[] for i in range(eval_days)}
+	pred_dict = {i:[] for i in range(eval_days)}
 
 	with torch.no_grad():
 		for i, batch in enumerate(valid_dataloader):
-			if mode == 'mlp':
-				if mask_type == 'strict':
-					(x_valid, y_valid, day_idx) = batch
-				else:
-					(x_valid, y_valid, mask) = batch
-				if isinstance(x_valid, list):
-					y_pred = model(x=[x_.to(device) for x_ in x_valid])
-				else:
-					y_pred = model(x_valid.to(device))  # [batch_sze, num_stocks, 1]
-			elif mode == 'gnn':
-				if mask_type=='strict':
-					(g, x_valid, y_valid, mask, node_cnt) = batch
-				else:
-					(g, x_valid, y_valid, mask) = batch
-				y_pred = model(g.to(device), x_valid.to(device)).squeeze()
+			if input_graph:
+				(x_valid, y_valid, mask, g) = batch
+				y_pred = model(x_valid.to(device), g.to(device))  # [batch_size, num_stocks, 1]
+			else:
+				(x_valid, y_valid, mask, day_idx) = batch
+				y_pred = model(x_valid.to(device))  # [batch_size, num_stocks, 1]
 
 			if mask_type == 'strict':
 				loss = criterion(y_pred.squeeze(), y_valid.squeeze().to(device))
@@ -112,8 +90,6 @@ def evaluate(model, valid_dataloader, criterion, device, print_inteval, mode, ma
 			total_steps += 1
 
 			if mask_type == 'soft':
-				# if len(y_pred.size()) == 1 or len(mask.size())==1:
-				# when batch size ==1, reshape to [1*num_stocks]
 				for j in range(y_pred.size(0)):  # 对每天计算ic
 					pred_return = torch.masked_select(y_pred[j].squeeze().detach().cpu(), mask[j].bool())
 					true_return = torch.masked_select(y_valid[j, :, -1].detach().cpu(), mask[j].bool())
@@ -139,17 +115,18 @@ def evaluate(model, valid_dataloader, criterion, device, print_inteval, mode, ma
 			
 
 
-def save_model(epoch, model, optimizer, ic, prefix, model_type='mlp'):
+def save_model(epoch, model, optimizer, ic, args):
 	state = {
 		"epoch": epoch,
 		"state_dict": model.state_dict(),
 		"optimizer": optimizer.state_dict()
 	}
 
-	filepath = datetime.datetime.now().strftime(f'%d-%m-%y-%H-%M_{model_type}_{epoch}_ic={ic}.pth')
-	if not os.path.exists(f"./checkpoint/{prefix}/"):
-		os.makedirs(f"./checkpoint/{prefix}/")
-	torch.save(state, os.path.join(f"./checkpoint/{prefix}/", filepath))
+	time_str = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+	filepath = f'{args.model_type}_{args.dataset_type}_{epoch}_ic={ic}.pth'
+	if not os.path.exists(f"./checkpoint/{time_str}/"):
+		os.makedirs(f"./checkpoint/{time_str}/")
+	torch.save(state, os.path.join(f"./checkpoint/{time_str}/", filepath))
 
 
 def load_model(model_path, model, optimizer):

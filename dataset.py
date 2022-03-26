@@ -9,16 +9,15 @@ from torch.utils.data import Dataset
 from torch_geometric.data import Data
 from torch_geometric.data import Dataset as PygDataset
 
-
 # from utils import normalize, sparse_mx_to_torch_sparse_tensor, fill_window
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 
 
 class TimeDataset(Dataset):
-	def __init__(self, data_path, mask_path, args, days=1) -> None:
+	def __init__(self, data_path, mask_path, args) -> None:
 		super(TimeDataset, self).__init__()
-		self.days = days
+		self.days = args.num_days
 		self.args = args
 		self.data = torch.from_numpy(np.load(data_path).astype('float32'))
 		self.mask = torch.from_numpy(np.load(mask_path))
@@ -29,12 +28,12 @@ class TimeDataset(Dataset):
 	
 	def __getitem__(self, idx) -> Tuple[torch.Tensor]:  # return (x, y, mask)
 		end_idx = idx + self.days
-		return (self.data[idx:end_idx, :, self.args.label_cnt:], self.data[end_idx-1, :, :self.args.label_cnt], self.mask[end_idx-1, :])
+		return (self.data[idx:end_idx, :, self.args.label_cnt:], self.data[end_idx-1, :, :self.args.label_cnt], self.mask[end_idx-1, :], torch.Tensor([idx]))
 
 
 class MaskedTimeDataset(TimeDataset):
-	def __init__(self, data_path, mask_path, args, days=1) -> None:
-		super(MaskedTimeDataset, self).__init__(data_path, mask_path, args, days)
+	def __init__(self, data_path, mask_path, args) -> None:
+		super(MaskedTimeDataset, self).__init__(data_path, mask_path, args)
 
 		index = np.argwhere(self.mask>0)
 		self.idx2pair = {i:index[i] for i in range(index.shape[0]) \
@@ -51,21 +50,28 @@ class MaskedTimeDataset(TimeDataset):
 
 		x = self.data[start_idx: end_idx, pair[1], self.args.label_cnt:]
 		y = self.data[end_idx-1, pair[1], :self.args.label_cnt]
-		return (x, y, torch.Tensor([start_idx]))
+		return (x, y, torch.Tensor([1]), torch.Tensor([start_idx]))
 
 
 class AdjTimeDataset(TimeDataset):
-	def __init__(self, data_path, mask_path, args, days=1) -> None:
-		super().__init__(data_path, mask_path, args, days)
-		self.adj = np.load(args.adj_path)  # TODO
+	def __init__(self, data_path, mask_path, args) -> None:
+		super().__init__(data_path, mask_path, args)
+		self.adj = torch.from_numpy(np.load(args.adj_path).astype('float32'))
 
-	
 	def __len__(self) -> int:
 		return super().__len__()
 	
 	def __getitem__(self, idx) -> Tuple[torch.Tensor]:
 		# returns (x, y, mask, adj)
-		return super().__getitem__(idx)
+		end_idx = idx + self.days
+		cur_mask = self.mask[end_idx-1, :]
+		if self.args.mask_adj:
+			cur_adj = torch.mul(self.adj, cur_mask.reshape(-1, 1))  # broadcast: [n*n] * [n*1] -> [n*n]
+		# TODO: return list of adjs, or none(adj in model)
+		# ? only move tranposed sparse matrix in GPU !
+		if not self.args.use_adj:
+			cur_adj = cur_adj.nonzero().t()
+		return (self.data[idx:end_idx, :, self.args.label_cnt:], self.data[end_idx-1, :, :self.args.label_cnt], self.mask[end_idx-1, :], cur_adj.long())
 
 	
 class GraphDataset(PygDataset):

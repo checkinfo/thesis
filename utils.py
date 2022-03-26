@@ -6,6 +6,7 @@ import torch.nn as nn
 import scipy.sparse as sp
 
 from collections.abc import Mapping, Sequence
+from datetime import datetime, timedelta
 #from dgl import backend as F
 #from dgl.batch import batch
 #from dgl.heterograph import DGLHeteroGraph as DGLGraph
@@ -73,7 +74,7 @@ def print_grad_norm(model):
 	'''
 	for name, p in parameters:
 		param_norm = p.grad.detach().data.norm(2)
-		if not (param_norm < 10 and param_norm > -10):
+		if not (param_norm < 20 and param_norm > -20):
 			print("norm clip needed: ", p.grad.detach().data, param_norm, name, p.size())
 		total_norm += param_norm.item()**2
 	return total_norm
@@ -120,6 +121,39 @@ def sparse_mx_to_torch_sparse_tensor(sparse_mx):
 
 def weighted_mse_loss(inputs, target, weight):
 	return torch.mean(weight * (inputs - target)**2)
+
+
+def increment_date(date_str, days=1):
+    date = datetime(int(date_str[:4]), int(date_str[4:6]), int(date_str[6:8]))
+    date += timedelta(days=days)
+    return date.strftime('%Y%m%d')
+
+def get_stock_list(stock_list_path):
+    stock_list = []
+    with open(stock_list_path, "r") as f:
+        for line in f:
+            stock_list.append(line.strip())
+    return stock_list
+
+
+def get_trading_days(traiding_days_path):
+    trading_days = []
+    with open(traiding_days_path, "r") as f:
+        for line in f:
+            trading_days.append(line.strip())
+    return trading_days
+
+
+def get_stock_id_mapping(stock_list_path):
+    # key:stock_code, value:idx
+    stock_list = get_stock_list(stock_list_path)
+    return dict(zip(stock_list, list(range(len(stock_list)))))
+
+
+def get_days_id_mapping(traiding_days_path):
+    # key:date, value:idx
+    trading_days = get_trading_days(traiding_days_path)
+    return dict(zip(trading_days, list(range(len(trading_days)))))
 
 
 """Math utils functions."""
