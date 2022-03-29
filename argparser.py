@@ -23,6 +23,7 @@ def get_parser():
     parser.add_argument('--num_heads', type=int, default=1, help='num of attenton heads')
     parser.add_argument('--gnn_layers', type=int, default=2, help='num of gnn layers')
     parser.add_argument('--print_inteval', type=int, default=500, help='log printing frequency')
+    parser.add_argument('--relation_num', type=int, default=1, help='num of edge type')
     parser.add_argument('--mask_type', default='soft', help='soft means dont \
         remove masked data in batch, strict means remove masked data before batching')
     

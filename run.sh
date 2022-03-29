@@ -1,0 +1,1 @@
+python  main.py @argfiles/base_argfile.txt > ./logs/$(date +"%Y_%m_%d_%I_%M_%S").log

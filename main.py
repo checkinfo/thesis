@@ -42,12 +42,12 @@ if __name__ == "__main__":
 		train_loss = train(epoch, cur_model, train_dataloader, criterion, optimzer, \
 			device, args.print_inteval, args.input_graph, args.mask_type)
 		print('Epoch {}: train loss: {}'.format(epoch, train_loss))
-		valid_loss, ic = evaluate(cur_model, test_dataloader, criterion, device, \
+		valid_loss, mse, ic, sharpe5, irr5, ndcg5 = evaluate(cur_model, test_dataloader, criterion, device, \
 			args.print_inteval, args.input_graph, args.mask_type)
-		print('Eval: total loss: {}, ic :{} '.format(valid_loss, ic))
+		print('Eval: total loss: {}, mse:{}, ic :{}, sharpe5:{}, irr5:{}, ndcg5:{} '.format(valid_loss, mse, ic, sharpe5, irr5, ndcg5))
 
 		if ic > max_ic:
 			max_ic = max(ic, max_ic)
 			save_model(epoch, cur_model, optimzer, ic, args)
 	
-	# python  main.py @argfile.txt > ./logs/$(date +"%Y_%m_%d_%I_%M_%S").log
+	# python  main.py @argfiles/argfile.txt > ./logs/$(date +"%Y_%m_%d_%I_%M_%S").log

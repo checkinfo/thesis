@@ -8,6 +8,8 @@ from scipy.stats import pearsonr
 from collections import namedtuple
 from torch_geometric.nn import GINConv, SAGEConv, GraphConv, GATConv
 
+from gclstm import GLSTMCell
+
 
 class Temporal_Attention_layer(nn.Module):
     def __init__(self, in_channels, num_of_vertices, num_of_timesteps):
@@ -112,27 +114,151 @@ class GNNModel(nn.Module):
 		self.seq_len = args.num_days
 		self.relu = nn.LeakyReLU()
 
-	def forward(self, x, edge_index):
+	def forward(self, x, edge_indexs):
 		batch_size, seq_len, num_stocks, num_features = x.size()
-		edge_index = edge_index.squeeze()
-		if edge_index.size(0) != 2:
-			edge_index = edge_index.nonzero().t()
+		assert batch_size == 1
+		edge_indexs = edge_indexs.squeeze(0)
+		if edge_indexs.size(0) != seq_len:
+			if edge_indexs.size(0) != 2:
+				edge_indexs = edge_indexs.nonzero().t()
+			graphs = [edge_indexs] * seq_len
+		else:
+			graphs = []
+			for i in range(edge_indexs.size(0)):
+				if edge_indexs[i].size(0) != 2:
+					graphs.append(edge_indexs[i].nonzero().t())
 			
 		output = self.relu(self.fc1(x))  # x: [num_ndoes, input_size]
 		output = self.relu(self.fc2(output))
+		output = torch.reshape(output, (seq_len, num_stocks, self.hidden_size))
 
-		output = torch.reshape(output, (-1, self.hidden_size))
+		new_out = []
+		for i in range(seq_len):
+			for j in range(len(self.gnns)):
+				out = self.relu(self.gnns[j](output[i], graphs[i]))  # input: x, edge_index
+				out = torch.reshape(out, (num_stocks, -1))
+			new_out.append(out)
 
-		for i in range(len(self.gnns)):
-			output = self.relu(self.gnns[i](output, edge_index))  # input: x, edge_index
-			output = torch.reshape(output, (batch_size*seq_len*num_stocks, -1))
-
-		output = torch.reshape(output, (batch_size, seq_len, num_stocks, -1))
-		output = self.relu(self.fc3(output))
-		output = self.fc4(output)[:, -1, :, :]
+		new_out = torch.stack(new_out, dim=0)
+		new_out = torch.reshape(new_out, (batch_size, seq_len, num_stocks, -1))
+		new_out = self.relu(self.fc3(new_out))
+		new_out = self.fc4(new_out)[:, -1, :, :]
 		
-		return output.reshape((batch_size, num_stocks, -1))
+		return new_out.reshape((batch_size, num_stocks, -1))
 
+
+class GLSTM(nn.Module):
+	def __init__(self, args):
+		super(GLSTM, self).__init__()
+		self.args = args
+		self.hidden_dim = args.hidden_dim
+		self.input_to_hidden = nn.Linear(args.input_dim, args.hidden_dim)
+		self.glstm_cell = GLSTMCell(args.hidden_dim, args.hidden_dim, args.relation_num, args.dout, args)
+		self.w_out = nn.Linear(args.hidden_dim, 1)
+		self.num_layers = args.gnn_layers
+		self.dropout = torch.nn.Dropout(args.dout)
+
+	def forward(self, x, adjs):
+		'''
+        :param x:   (batch, time, node, feature_size)
+        :param adjs: (batch, time, node, node)
+        :return:    (batch_size, node, label)
+        '''
+		batch_size, seq_len, num_stocks, num_features = x.size()
+		assert batch_size == 1
+		x, adjs = x.squeeze(0), adjs.squeeze(0)
+
+		if adjs.size(0) != seq_len:
+			if adjs.size(0) != 2:
+				adjs = adjs.nonzero().t()
+			graphs = [adjs] * seq_len
+		else:
+			graphs = []
+			for i in range(adjs.size(0)):
+				if adjs[i].size(0) != 2:
+					graphs.append(adjs[i].nonzero().t())
+
+		x = self.input_to_hidden(x)
+		last_h_time_price = torch.squeeze(x[0], 0)  # node feature 
+		last_c_time_price = torch.squeeze(x[0], 0)  # node feature 
+       
+		for t in range(seq_len):
+			last_h_layer_price = last_h_time_price
+			last_c_layer_price = last_c_time_price
+            
+			for l in range(self.num_layers):
+                # x, h, c, h_t, adj
+				last_h_layer_price, last_c_layer_price = self.glstm_cell(torch.squeeze(x[t], 0), \
+					last_h_layer_price, last_c_layer_price, last_h_time_price, graphs[t])
+			last_h_time_price, last_c_time_price = last_h_layer_price, last_c_layer_price
+
+		return self.w_out(self.dropout(last_h_time_price)).reshape(batch_size, num_stocks, 1)
+
+
+class BiGLSTM(nn.Module):
+	def __init__(self, args):
+		super(BiGLSTM, self).__init__()
+		self.args = args
+		self.hidden_dim = args.hidden_dim
+		self.input_to_hidden = nn.Linear(args.input_dim, args.hidden_dim)
+		self.forward_cell = GLSTMCell(args.hidden_dim, args.hidden_dim, args.relation_num, args.dout, args)
+		self.backward_cell = GLSTMCell(args.hidden_dim, args.hidden_dim, args.relation_num, args.dout, args)
+		self.fc0 = nn.Linear(2*args.hidden_dim, args.hidden_dim)
+		self.w_out = nn.Linear(args.hidden_dim, 1)
+		self.num_layers = args.gnn_layers
+		self.dropout = torch.nn.Dropout(args.dout)
+
+	def forward(self, x, adjs):
+		'''
+        :param x:   (batch, time, node, feature_size)
+        :param adjs: (batch, time, node, node)
+        :return:    (batch_size, node, label)
+        '''
+		batch_size, seq_len, num_stocks, num_features = x.size()
+		assert batch_size == 1
+		x, adjs = x.squeeze(0), adjs.squeeze(0)
+
+		if adjs.size(0) != seq_len:
+			if adjs.size(0) != 2:
+				adjs = adjs.nonzero().t()
+			graphs = [adjs] * seq_len
+		else:
+			graphs = []
+			for i in range(adjs.size(0)):
+				if adjs[i].size(0) != 2:
+					graphs.append(adjs[i].nonzero().t())
+
+		x = self.input_to_hidden(x)
+		# forward pass
+		last_h_time_price = torch.squeeze(x[0], 0)  # node feature 
+		last_c_time_price = torch.squeeze(x[0], 0)  # node feature 
+       
+		for t in range(seq_len):
+			last_h_layer_price = last_h_time_price
+			last_c_layer_price = last_c_time_price
+            
+			for l in range(self.num_layers):
+                # x, h, c, h_t, adj
+				last_h_layer_price, last_c_layer_price = self.forward_cell(torch.squeeze(x[t], 0), \
+					last_h_layer_price, last_c_layer_price, last_h_time_price, graphs[t])
+			last_h_time_price, last_c_time_price = last_h_layer_price, last_c_layer_price
+
+		# backward pass
+		last_h_time_price_b = torch.squeeze(x[-1], 0)  # node feature 
+		last_c_time_price_b = torch.squeeze(x[-1], 0)  # node feature 
+       
+		for t in range(seq_len-1, -1, -1):
+			last_h_layer_price_b = last_h_time_price_b
+			last_c_layer_price_b = last_c_time_price_b
+            
+			for l in range(self.num_layers):
+                # x, h, c, h_t, adj
+				last_h_layer_price_b, last_c_layer_price_b = self.backward_cell(torch.squeeze(x[t], 0), \
+					last_h_layer_price_b, last_c_layer_price_b, last_h_time_price_b, graphs[t])
+			last_h_time_price_b, last_c_time_price_b = last_h_layer_price_b, last_c_layer_price_b
+		
+		out = self.fc0(self.dropout(torch.cat([last_h_time_price, last_h_time_price_b], dim=-1)))
+		return self.w_out(self.dropout(out)).reshape(batch_size, num_stocks, 1)
 
 
 class HypModel(nn.Module):

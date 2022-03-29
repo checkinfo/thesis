@@ -1,0 +1,89 @@
+Namespace(train_path='./data/train_2305_1931_12.npy', test_path='./data/test_126_1931_12.npy', train_mask_path='./data/train_mask_2305_1931.npy', test_mask_path='./data/test_mask_126_1931.npy', label_cnt=3, batch_size=8, lr=0.0004, adj_path='./data/concepts_graph_1931_233_3.npy', model_type='BaseLSTM', dataset_type='TimeDataset', seed=10086, num_days=8, epochs=20, hidden_dim=128, input_dim=9, dout=0.3, lstm_layers=3, num_heads=1, gnn_layers=2, print_inteval=500, mask_type='soft', shuffle=True, input_graph=False, use_adj=False, mask_adj=False)
+387596
+BaseLSTM(
+  (rnn1): LSTM(9, 128, num_layers=3, batch_first=True, dropout=0.3, bidirectional=True)
+  (fc0): Linear(in_features=256, out_features=128, bias=True)
+  (predict): Linear(in_features=128, out_features=1, bias=True)
+  (relu): PReLU(num_parameters=1)
+  (dropout): Dropout(p=0.3, inplace=False)
+)
+train 0, step: 0, loss: 2.814532054911626, grad_norm: 0.023375154765169916, ic: -0.014593969211444536
+Epoch 0: train loss: 1.612149867819073
+Eval step 0: eval loss: 1.1427476434493649
+Eval: total loss: 1.0734742341029047, ic :0.0014658598788703028 
+train 1, step: 0, loss: 2.1529863986596087, grad_norm: 0.028078480167078958, ic: 0.01409255304236125
+Epoch 1: train loss: 1.6123265921381393
+Eval step 0: eval loss: 1.1400494855070078
+Eval: total loss: 1.073078315505479, ic :0.0017754053146448944 
+train 2, step: 0, loss: 1.9416374199074486, grad_norm: 0.006585328700937429, ic: 0.02526681400989693
+Epoch 2: train loss: 1.61445658976755
+Eval step 0: eval loss: 1.1424214585938013
+Eval: total loss: 1.0733969685195552, ic :0.0023092000432205478 
+train 3, step: 0, loss: 1.6204850085490963, grad_norm: 0.01929417914300707, ic: 0.043635360565336914
+Epoch 3: train loss: 1.6114206900239603
+Eval step 0: eval loss: 1.1464616268835954
+Eval: total loss: 1.0743538322221762, ic :0.004827096580453214 
+train 4, step: 0, loss: 1.9571861086137512, grad_norm: 0.009684584076205503, ic: -0.012380765413066003
+Epoch 4: train loss: 1.6115951337966594
+Eval step 0: eval loss: 1.147451748289136
+Eval: total loss: 1.0747038224633954, ic :0.0038933314663962843 
+train 5, step: 0, loss: 1.5913818966341557, grad_norm: 0.09904630472553619, ic: 0.07505005913176552
+Epoch 5: train loss: 1.6105401175569451
+Eval step 0: eval loss: 1.1451099775037836
+Eval: total loss: 1.0739561828401607, ic :0.005145000224312265 
+train 6, step: 0, loss: 1.60891752254509, grad_norm: 0.018636741889039788, ic: 0.1080703736906585
+Epoch 6: train loss: 1.6073782992306598
+Eval step 0: eval loss: 1.1452486510495492
+Eval: total loss: 1.074060801602394, ic :0.0048215980564501335 
+train 7, step: 0, loss: 2.1540417793469553, grad_norm: 0.14999587320193322, ic: 0.0511145379833058
+Epoch 7: train loss: 1.6090900506075119
+Eval step 0: eval loss: 1.1391197687043495
+Eval: total loss: 1.073253567657661, ic :0.005508251634724892 
+train 8, step: 0, loss: 2.0123661258915164, grad_norm: 0.015663075143086774, ic: 0.020579201571725665
+Epoch 8: train loss: 1.610232746068489
+Eval step 0: eval loss: 1.14401845347766
+Eval: total loss: 1.0737713508014766, ic :0.0068010007867402526 
+train 9, step: 0, loss: 2.2800317007471067, grad_norm: 0.019844312664644346, ic: 0.017335689344023034
+Epoch 9: train loss: 1.6090933111215906
+Eval step 0: eval loss: 1.1397036370253997
+Eval: total loss: 1.0733277399266596, ic :0.008362869553979935 
+train 10, step: 0, loss: 1.1177132526564344, grad_norm: 0.0052088873879367155, ic: 0.06122453663707484
+Epoch 10: train loss: 1.6078315148710631
+Eval step 0: eval loss: 1.14316816230177
+Eval: total loss: 1.073533302507496, ic :0.014265182058735646 
+train 11, step: 0, loss: 1.5842084935102512, grad_norm: 0.013649692323898732, ic: 0.11870432595554811
+Epoch 11: train loss: 1.6095253499330495
+Eval step 0: eval loss: 1.1384231879647297
+Eval: total loss: 1.0755644258742618, ic :0.012719004492193502 
+train 12, step: 0, loss: 1.4917416668488717, grad_norm: 0.08047966777678825, ic: 0.09872250989553309
+Epoch 12: train loss: 1.6091188315146945
+Eval step 0: eval loss: 1.1438984153944858
+Eval: total loss: 1.0738233871276337, ic :0.0201863641611409 
+train 13, step: 0, loss: 1.4181179283405172, grad_norm: 0.006899326380689769, ic: 0.03356714567180967
+Epoch 13: train loss: 1.609010051239548
+Eval step 0: eval loss: 1.1429962019642035
+Eval: total loss: 1.0739721995499982, ic :0.024984624667593953 
+train 14, step: 0, loss: 1.7026204657622168, grad_norm: 0.05119419896695731, ic: 0.09675903425008933
+Epoch 14: train loss: 1.6095741699484165
+Eval step 0: eval loss: 1.1411494918816214
+Eval: total loss: 1.0729144525946004, ic :0.03406102257633924 
+train 15, step: 0, loss: 1.6150738536766664, grad_norm: 0.001682749187579442, ic: 0.03712298895165038
+Epoch 15: train loss: 1.6077857171289263
+Eval step 0: eval loss: 1.1436871278048297
+Eval: total loss: 1.0732604987461605, ic :0.03304108750328102 
+train 16, step: 0, loss: 1.473781015166789, grad_norm: 0.017158387682863846, ic: 0.0702577892155348
+Epoch 16: train loss: 1.6108515486994046
+Eval step 0: eval loss: 1.1398911483351977
+Eval: total loss: 1.0732135840688968, ic :0.035323112683546876 
+train 17, step: 0, loss: 1.5014922974947087, grad_norm: 0.00839129460599506, ic: 0.03846079346328817
+Epoch 17: train loss: 1.6037319908072991
+Eval step 0: eval loss: 1.1394785977495558
+Eval: total loss: 1.072515283634876, ic :0.03682997765897422 
+train 18, step: 0, loss: 1.2500963417281807, grad_norm: 0.21381936747849306, ic: 0.024821026343532154
+Epoch 18: train loss: 1.6121357807642407
+Eval step 0: eval loss: 1.1412859805800486
+Eval: total loss: 1.073074297081924, ic :0.03314817407662297 
+train 19, step: 0, loss: 1.6815820531933283, grad_norm: 0.019891049503653422, ic: 0.05509244090971551
+Epoch 19: train loss: 1.6093835132659575
+Eval step 0: eval loss: 1.1415994419128774
+Eval: total loss: 1.0730075191896202, ic :0.036694650199111244 
