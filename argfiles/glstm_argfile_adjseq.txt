@@ -6,7 +6,7 @@
 --lr=1e-3
 --adj_path=./data/concepts_graph_1931_233_3.npy
 --model_type=GLSTM
---dataset_type=AdjTimeDataset
+--dataset_type=AdjSeqTimeDataset
 --seed=10086
 --num_days=8
 --epochs=20

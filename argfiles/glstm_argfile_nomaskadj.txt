@@ -21,4 +21,3 @@
 --relation_num=1
 --shuffle
 --input_graph
---mask_adj

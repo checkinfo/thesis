@@ -5,7 +5,7 @@
 --batch_size=1
 --lr=1e-3
 --adj_path=./data/concepts_graph_1931_233_3.npy
---model_type=GLSTM
+--model_type=BiGLSTM
 --dataset_type=AdjTimeDataset
 --seed=10086
 --num_days=8
@@ -21,4 +21,3 @@
 --relation_num=1
 --shuffle
 --input_graph
---mask_adj
