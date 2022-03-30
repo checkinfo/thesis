@@ -156,6 +156,63 @@ def get_days_id_mapping(traiding_days_path):
     return dict(zip(trading_days, list(range(len(trading_days)))))
 
 
+def fill_zeros_with_last(arr):
+    # fill zero values of 1d numpy array with last non-zero values
+    prev = np.arange(len(arr))
+    prev[arr == 0] = 0
+    prev = np.maximum.accumulate(prev)
+    return arr[prev]
+
+def fill_na_with_last(tmp):
+    tmp = tmp.reshape(tmp.shape[0], -1)
+    # tmp[tmp==0] = np.nan
+    m = np.isnan(tmp)
+    print("mask", m.shape)
+    pos = np.where(~m, np.expand_dims(np.arange(tmp.shape[0]), axis=1), 0)
+    print("pos", pos.shape)
+    np.maximum_accumulate(pos, axis=0, out=pos)
+    tmp[m] = tmp[pos[m], np.nonzero(m)[-1]]
+    print("tmp:", tmp.shape)
+    tmp = tmp.fillna(0).reshape((2305, 4096, -1))
+    
+def fill_ma_nan(df):
+    # 'ma5','ma10','ma20','ma30'
+    prev_row = df.iloc[-1]
+    for idx,row in df[::-1].iterrows():
+        # print(idx)
+        if row.isnull().sum().sum() == 0:
+            # print(idx)
+            break
+        # print(row['ma30'], row['ma30'] == np.nan, pd.isna(row['ma30']))
+        if pd.isna(row['ma30']):
+            if not pd.isna(prev_row['ma20']):
+                df.loc[idx, 'ma30'] = prev_row['ma20']
+            elif not pd.isna(prev_row['ma10']):
+                df.loc[idx,'ma30'] = prev_row['ma10']
+            elif not pd.isna(prev_row['ma5']):
+                df.loc[idx,'ma30'] = prev_row['ma5']
+            else:
+                df.loc[idx,'ma30'] = row['close']
+        
+        if pd.isna(row['ma20']):
+            if not pd.isna(prev_row['ma10']):
+                df.loc[idx,'ma20'] = prev_row['ma10']
+            elif not pd.isna(prev_row['ma5']):
+                df.loc[idx,'ma20'] = prev_row['ma5']
+            else:
+                df.loc[idx,'ma20'] = row['close']
+                
+        if pd.isna(row['ma10']):
+            if not pd.isna(prev_row['ma5']):
+                df.loc[idx,'ma10'] = prev_row['ma5']
+            else:
+                df.loc[idx,'ma10'] = row['close']
+        
+        if pd.isna(row['ma5']):
+            df.loc[idx,'ma5'] = row['close']
+                
+        prev_row = row
+
 """Math utils functions."""
 
 import torch

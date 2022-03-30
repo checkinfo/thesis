@@ -27,8 +27,8 @@ class TimeDataset(Dataset):
 		# no need to remove the last day
 	
 	def __getitem__(self, idx) -> Tuple[torch.Tensor]:  # return (x, y, mask)
-		end_idx = idx + self.days  # mask already shifted
-		return (self.data[idx:end_idx, :, self.args.label_cnt:], self.data[end_idx-1, :, :self.args.label_cnt], self.mask[end_idx-1, :], torch.Tensor([idx]))
+		end_idx = idx + self.days  # mask not shifted
+		return (self.data[idx:end_idx, :, self.args.label_cnt:], self.data[end_idx-1, :, :self.args.label_cnt], self.mask[min(end_idx, len(self.data)-1), :], torch.Tensor([idx]))
 
 
 class MaskedTimeDataset(TimeDataset):
@@ -64,7 +64,7 @@ class AdjTimeDataset(TimeDataset):
 	def __getitem__(self, idx) -> Tuple[torch.Tensor]:
 		# returns (x, y, mask, adj)
 		end_idx = idx + self.days
-		cur_mask = self.mask[end_idx-1, :]  # mask already shifted
+		cur_mask = self.mask[end_idx-1, :]  # mask not shifted
 		if self.args.mask_adj:
 			cur_adj = torch.mul(self.adj, cur_mask.reshape(-1, 1))  # broadcast: [n*n] * [n*1] -> [n*n]
 		else:
@@ -72,7 +72,7 @@ class AdjTimeDataset(TimeDataset):
 		if not self.args.use_adj:
 			cur_adj = cur_adj.nonzero().t()
 		return (self.data[idx:end_idx, :, self.args.label_cnt:], \
-			self.data[end_idx-1, :, :self.args.label_cnt], self.mask[end_idx-1, :], cur_adj.long())
+			self.data[end_idx-1, :, :self.args.label_cnt], self.mask[min(end_idx, len(self.data)-1), :], cur_adj.long())
 
 
 class AdjSeqTimeDataset(AdjTimeDataset):
@@ -87,13 +87,13 @@ class AdjSeqTimeDataset(AdjTimeDataset):
 		end_idx = idx + self.days
 		adjs = []
 		for i in range(idx, end_idx):  # [idx, end_idx-1]
-			cur_mask = self.mask[i, :] if i==0 else self.mask[i-1, :]  # mask already shifted
+			cur_mask = self.mask[i, :]  # mask not shifted
 			cur_adj = torch.mul(self.adj, cur_mask.reshape(-1, 1)) \
 				if self.args.mask_adj else self.adj # broadcast: [n*n] * [n*1] -> [n*n]
 			# cannot return edge index, return stacked adj instead
 			adjs.append(cur_adj)
 		return (self.data[idx:end_idx, :, self.args.label_cnt:], \
-			self.data[end_idx-1, :, :self.args.label_cnt], self.mask[end_idx-1, :], \
+			self.data[end_idx-1, :, :self.args.label_cnt], self.mask[min(end_idx, len(self.data)-1), :], \
 				torch.stack(adjs, dim=0).long())
 
 
