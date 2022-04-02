@@ -114,20 +114,18 @@ class GNNModel(nn.Module):
 		self.seq_len = args.num_days
 		self.relu = nn.LeakyReLU()
 
-	def forward(self, x, edge_indexs):
+	def forward(self, x, edge_indexs, edgenum):
 		batch_size, seq_len, num_stocks, num_features = x.size()
 		assert batch_size == 1
 		edge_indexs = edge_indexs.squeeze(0)
-		if edge_indexs.size(0) != seq_len:
-			if edge_indexs.size(0) != 2:
-				edge_indexs = edge_indexs.nonzero().t()
-			graphs = [edge_indexs] * seq_len
-		else:
-			graphs = []
+
+		graphs = []
+		if edge_indexs.size(0) == 2:  # concated edge index [2, n]
+			graphs = torch.split(edge_indexs, edgenum.flatten().tolist(), dim=1)
+		else:  # stacked dense adjs [num_days, stocknum, stocknum]
 			for i in range(edge_indexs.size(0)):
-				if edge_indexs[i].size(0) != 2:
-					graphs.append(edge_indexs[i].nonzero().t())
-			
+				graphs.append(edge_indexs[i].nonzero().t())
+				
 		output = self.relu(self.fc1(x))  # x: [num_ndoes, input_size]
 		output = self.relu(self.fc2(output))
 		output = torch.reshape(output, (seq_len, num_stocks, self.hidden_size))

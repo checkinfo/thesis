@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset
 from torch_geometric.data import Data
 from torch_geometric.data import Dataset as PygDataset
+from torch_geometric.utils import to_dense_adj
 
 # from utils import normalize, sparse_mx_to_torch_sparse_tensor, fill_window
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
@@ -15,9 +16,10 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 
 class TimeDataset(Dataset):
-	def __init__(self, data_path, mask_path, args) -> None:
+	def __init__(self, data_path, mask_path, dataset_type, args) -> None:
 		super(TimeDataset, self).__init__()
 		self.days = args.num_days
+		self.dataset_type = dataset_type
 		self.args = args
 		self.data = torch.from_numpy(np.load(data_path).astype('float32'))
 		self.mask = torch.from_numpy(np.load(mask_path))
@@ -32,8 +34,8 @@ class TimeDataset(Dataset):
 
 
 class MaskedTimeDataset(TimeDataset):
-	def __init__(self, data_path, mask_path, args) -> None:
-		super(MaskedTimeDataset, self).__init__(data_path, mask_path, args)
+	def __init__(self, data_path, mask_path, dataset_type, args) -> None:
+		super(MaskedTimeDataset, self).__init__(data_path, mask_path, dataset_type, args)
 
 		index = np.argwhere(self.mask>0)
 		self.idx2pair = {i:index[i] for i in range(index.shape[0]) \
@@ -54,15 +56,15 @@ class MaskedTimeDataset(TimeDataset):
 
 
 class AdjTimeDataset(TimeDataset):
-	def __init__(self, data_path, mask_path, args) -> None:
-		super().__init__(data_path, mask_path, args)
+	def __init__(self, data_path, mask_path, dataset_type, args) -> None:
+		super().__init__(data_path, mask_path, dataset_type, args)
 		self.adj = torch.from_numpy(np.load(args.adj_path).astype('float32'))
 
 	def __len__(self) -> int:
 		return super().__len__()
 	
 	def __getitem__(self, idx) -> Tuple[torch.Tensor]:
-		# returns (x, y, mask, adj)
+		# returns (x, y, mask, adj, end_idx)
 		end_idx = idx + self.days
 		cur_mask = self.mask[end_idx-1, :]  # mask not shifted
 		if self.args.mask_adj:
@@ -71,30 +73,92 @@ class AdjTimeDataset(TimeDataset):
 			cur_adj = self.adj
 		if not self.args.use_adj:
 			cur_adj = cur_adj.nonzero().t()
-		return (self.data[idx:end_idx, :, self.args.label_cnt:], \
-			self.data[end_idx-1, :, :self.args.label_cnt], self.mask[min(end_idx, len(self.data)-1), :], cur_adj.long())
+		return (self.data[idx:end_idx, :, \
+				self.args.label_cnt:], \
+				self.data[end_idx-1, :, :self.args.label_cnt], \
+				self.mask[min(end_idx, len(self.data)-1), :], \
+				cur_adj if self.args.use_adj else cur_adj.long(), \
+				torch.LongTensor([cur_adj.size(1)]))  # meaningless
 
 
 class AdjSeqTimeDataset(AdjTimeDataset):
-	def __init__(self, data_path, mask_path, args) -> None:
-		super().__init__(data_path, mask_path, args)
+	def __init__(self, data_path, mask_path, dataset_type, args) -> None:
+		super().__init__(data_path, mask_path, dataset_type, args)
 
 	def __len__(self) -> int:
 		return super().__len__()
 	
 	def __getitem__(self, idx) -> Tuple[torch.Tensor]:
-		# returns (x, y, mask, adjs)
+		# returns (x, y, mask, adjs, end_idxs)
 		end_idx = idx + self.days
-		adjs = []
+		adjs, edgenum = [], []
 		for i in range(idx, end_idx):  # [idx, end_idx-1]
 			cur_mask = self.mask[i, :]  # mask not shifted
 			cur_adj = torch.mul(self.adj, cur_mask.reshape(-1, 1)) \
 				if self.args.mask_adj else self.adj # broadcast: [n*n] * [n*1] -> [n*n]
-			# cannot return edge index, return stacked adj instead
+			if not self.args.use_adj:
+				cur_adj = cur_adj.nonzero().t()
+				edgenum.append(cur_adj.size(1))
 			adjs.append(cur_adj)
-		return (self.data[idx:end_idx, :, self.args.label_cnt:], \
-			self.data[end_idx-1, :, :self.args.label_cnt], self.mask[min(end_idx, len(self.data)-1), :], \
-				torch.stack(adjs, dim=0).long())
+
+		if self.args.use_adj:  # stacked adjs
+			return (self.data[idx:end_idx, :, self.args.label_cnt:], \
+					self.data[end_idx-1, :, :self.args.label_cnt], \
+					self.mask[min(end_idx, len(self.data)-1), :], \
+					torch.stack(adjs, dim=0).long(), \
+					torch.LongTensor([1931]))  # meaningless
+		else:  # concated edge index, also return end idx for every edge index
+			return (self.data[idx:end_idx, :, self.args.label_cnt:], \
+					self.data[end_idx-1, :, :self.args.label_cnt], \
+					self.mask[min(end_idx, len(self.data)-1), :], \
+					torch.cat(adjs, dim=1).long(), \
+					torch.LongTensor(edgenum)) # default 
+
+
+class SparseAdjSeqTimeDataset(TimeDataset):
+	def __init__(self, data_path, mask_path, dataset_type, args) -> None:
+		super().__init__(data_path, mask_path, dataset_type, args)
+		self.adj_list = self.load_graphs(args.sparse_adj_path)  # list of edge indexs
+
+	def load_graphs(self, graph_path):
+		adj_list = []
+		st = 0 if self.dataset_type == "train" else 2305
+		total_days = 2305 if self.dataset_type=='train' else 126
+		for i in range(st, st+total_days):
+			adj = np.load(os.path.join(graph_path, f"date_{st}.npz"))['adj']
+			adj_list.append(torch.from_numpy(adj).long())  # edge index should be longtensor
+		assert len(adj_list) == total_days
+		print(f"load {len(adj_list)} {self.dataset_type} graphs successful!")
+		return adj_list
+
+	def __len__(self) -> int:
+		return super().__len__()
+	
+	def __getitem__(self, idx) -> Tuple[torch.Tensor]:
+		# returns (x, y, mask, adjs, end_idxs)
+		end_idx = idx + self.days
+		adjs, edgenum = [], []
+		for i in range(idx, end_idx):  # [idx, end_idx-1]
+			cur_mask = self.mask[i, :]  # mask not shifted
+			cur_adj = torch.mul(to_dense_adj(self.adj_list[i], max_num_nodes=self.args.stock_num).squeeze(0), cur_mask.reshape(-1, 1)) \
+				if self.args.mask_adj else self.adj # broadcast: [n*n] * [n*1] -> [n*n]
+			if not self.args.use_adj:
+				cur_adj = cur_adj.nonzero().t()
+				edgenum.append(cur_adj.size(1))
+			adjs.append(cur_adj)
+			
+		if self.args.use_adj:  # stacked adjs
+			return (self.data[idx:end_idx, :, self.args.label_cnt:], \
+					self.data[end_idx-1, :, :self.args.label_cnt], \
+					self.mask[min(end_idx, len(self.data)-1), :], \
+					torch.stack(adjs, dim=0).long(), \
+					torch.LongTensor([1931]))  # meaningless
+		else:  # concated edge index, also return end idx for every edge index
+			return (self.data[idx:end_idx, :, self.args.label_cnt:], \
+					self.data[end_idx-1, :, :self.args.label_cnt], \
+					self.mask[min(end_idx, len(self.data)-1), :], \
+					torch.cat(adjs, dim=1).long(), \
+					torch.LongTensor(edgenum))
 
 
 class GraphDataset(PygDataset):

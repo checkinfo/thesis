@@ -9,8 +9,10 @@ def get_parser():
     parser.add_argument('--label_cnt', type=int, default=3, \
         help='labels start from idx zero, end at label_cnt, i.e. pre_close+change+pct_chg')
     parser.add_argument('--batch_size', type=int, help='batch size: how many days in a batch')
+    parser.add_argument('--gpu', type=int, default=0, help='which gpu to use')
     parser.add_argument('--lr', type=float, help='learning rate')
     parser.add_argument('--adj_path', help='path of graph in adj format, .npy file')
+    parser.add_argument('--sparse_adj_path', help='path of edge indexs, folder of .npz files')
     parser.add_argument('--model_type', help='desired class name')
     parser.add_argument('--dataset_type', help='desired class name')
     parser.add_argument('--seed', type=int, default=10086, help='random seed')
@@ -24,6 +26,7 @@ def get_parser():
     parser.add_argument('--gnn_layers', type=int, default=2, help='num of gnn layers')
     parser.add_argument('--print_inteval', type=int, default=500, help='log printing frequency')
     parser.add_argument('--relation_num', type=int, default=1, help='num of edge type')
+    parser.add_argument('--stock_num', type=int, default=1931, help='num of stocks')
     parser.add_argument('--mask_type', default='soft', help='soft means dont \
         remove masked data in batch, strict means remove masked data before batching')
     

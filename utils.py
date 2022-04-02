@@ -2,6 +2,7 @@ import math
 import torch
 import random
 import numpy as np
+import pandas as pd
 import torch.nn as nn
 import scipy.sparse as sp
 
@@ -23,6 +24,11 @@ def set_seed(seed=10086): # 1029
 	torch.backends.cudnn.deterministic = True
 	torch.backends.cudnn.enabled = False
 	'''
+
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
 
 def lr_lambda(current_step):
 	num_warmup_steps = 40*3  # 3 epochs

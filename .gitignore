@@ -157,3 +157,21 @@ venv.bak/
 # custom folders to ignore
 crawler/
 hetegraph/
+checkpoint/
+data/hfq_price/
+data/close_hfq_2006/
+data/raw_price/
+data/icgraph_window_*/
+data/*.csv
+data/*.zip
+data/close_*
+data/prices_*
+data/mask_2431_1931.npy
+data/mask_2432_1931.npy
+data/mask_3404_1931.npy
+data/stock_delistadtertrain_26.txt
+data/stock_listintest_26.txt
+data/test_125_1931_12.npy
+data/test_mask_125_1931.npy
+data/trading_opendays_3404.txt
+data/train_2305_1931_12.npz

@@ -18,14 +18,17 @@ def train(epoch, model, train_dataloader, criterion, optimizer, device, print_in
 	for i, batch in enumerate(train_dataloader):
 		optimizer.zero_grad()
 		if input_graph:
-			(x_train, y_train, mask, g) = batch
-			y_pred = model(x_train.to(device), g.to(device))  # [batch_size, num_stocks, 1]
+			(x_train, y_train, mask, g, edgenum) = batch
+			# print(x_train.size(), y_train.size(), mask.size(), g.size(), edgenum.size())
+			# torch.Size([1, 8, 1931, 9]) torch.Size([1, 1931, 3]) torch.Size([1, 1931]) torch.Size([1, 2, 6999593]) torch.Size([1, 8]
+			y_pred = model(x_train.to(device), g.to(device), edgenum.to(device))  # [batch_size, num_stocks, 1]
 		else:
 			(x_train, y_train, mask, day_idx) = batch
 			y_pred = model(x=x_train.to(device))  # [batch_size, num_stocks, 1]
 
+		# predict percentage change
 		if mask_type == 'strict':
-			loss = criterion(y_pred.squeeze(), y_train.flatten().to(device))
+			loss = criterion(y_pred.squeeze(), y_train[:, : ,-1].flatten().to(device))
 		else:
 			mse_loss = criterion(y_pred.squeeze(), y_train[:, : ,-1].squeeze().to(device))
 			mse_loss = (mse_loss*mask.float().to(device)).sum()
@@ -73,12 +76,13 @@ def evaluate(model, valid_dataloader, criterion, device, print_inteval, input_gr
 	with torch.no_grad():
 		for i, batch in enumerate(valid_dataloader):
 			if input_graph:
-				(x_valid, y_valid, mask, g) = batch
-				y_pred = model(x_valid.to(device), g.to(device))  # [batch_size, num_stocks, 1]
+				(x_valid, y_valid, mask, g, edgenum) = batch
+				y_pred = model(x_valid.to(device), g.to(device), edgenum.to(device))  # [batch_size, num_stocks, 1]
 			else:
 				(x_valid, y_valid, mask, day_idx) = batch
 				y_pred = model(x_valid.to(device))  # [batch_size, num_stocks, 1]
-
+			
+			# predict percentage change
 			if mask_type == 'strict':
 				loss = criterion(y_pred.squeeze(), y_valid[:, :, -1].squeeze().to(device))
 			else:
@@ -94,26 +98,27 @@ def evaluate(model, valid_dataloader, criterion, device, print_inteval, input_gr
 			total_steps += 1
 
 			if mask_type=='soft':
-				calc_metrics(performances, y_pred.squeeze(-1).detach().cpu(), y_valid[:, :, -1], mask, mask_type)
+				calc_metrics(performances, y_pred.squeeze(-1).detach().cpu(), y_valid[:, :, -1], mask, mask_type=mask_type)
 			elif mask_type=='strict':
 				for j in range(y_pred.size(0)):
 					y_dict[int(day_idx[j].item())].append(y_valid[j, : ,-1].item())
 					pred_dict[int(day_idx[j].item())].append(y_pred[j].item())
 		
 		if mask_type == 'strict':
-			calc_metrics(performances, pred_dict, y_dict, mask, mask_type)
+			calc_metrics(performances, pred_dict, y_dict, mask, mask_type=mask_type)
 		
 	irr5 = sum(performances['irr5']) - 1 # 收益率，不算复利，每天都投入1……
 	sharpe5 = (np.mean(performances['irr5'])/np.std(performances['irr5']))*15.87 #To annualize,	每日收益率的均值除以波动
 	ic = np.mean(performances['ic'])
 	ndcg5 = np.mean(performances['ndcg_top5'])
 	mse = performances['mse'] / len(performances['ic'])
+	pnl5 = np.mean([x for x in performances['irr5'] if x >= 0]) / (-np.mean([x for x in performances['irr5'] if x < 0]))
 	# pnl = avg profit / avg loss, 收益率列表里面，正的求个平均，负的求个平均
 	# appt = prob of profit * avg profit - prob of loss*avg loss
-	return running_loss / total_steps, mse, ic, sharpe5, irr5, ndcg5
+	return running_loss / total_steps, mse, ic, sharpe5, irr5, ndcg5, pnl5
 
 			
-def calc_metrics(performances, prediction, ground_truth, mask, mask_type='soft'):
+def calc_metrics(performances, prediction, ground_truth, mask, top_stocks=5.0, mask_type='soft'):
 	# [batch_size, num_stocks]
 	assert ground_truth.size() == prediction.size() == mask.size(), 'shape mis-match'
 
@@ -139,7 +144,7 @@ def calc_metrics(performances, prediction, ground_truth, mask, mask_type='soft')
 			cur_rank = rank_gt[-1 * k]
 			if mask_type=='soft' and mask[j][cur_rank] < 0.5:
 				continue
-			if len(gt_top5) < 5:
+			if len(gt_top5) < int(top_stocks):  # 5 by default
 				gt_top5.add(cur_rank)
 			else:
 				break
@@ -152,7 +157,7 @@ def calc_metrics(performances, prediction, ground_truth, mask, mask_type='soft')
 			cur_rank = rank_pre[-1 * k]
 			if mask_type=='soft' and mask[j][cur_rank] < 0.5:
 				continue
-			if len(pre_top5) < 5:
+			if len(pre_top5) < int(top_stocks):   # 5 by default
 				pre_top5.add(cur_rank)
 			else:
 				break
@@ -162,8 +167,8 @@ def calc_metrics(performances, prediction, ground_truth, mask, mask_type='soft')
         # back testing each day on top 5
 		real_ret_rat_top5 = 0
 		for pre in pre_top5:
-			real_ret_rat_top5 += ground_truth[j][pre]
-		real_ret_rat_top5 /= 5
+			real_ret_rat_top5 += ground_truth[j][pre] # percentage change
+		real_ret_rat_top5 /= int(top_stocks)   # 5 by default
 		performances['irr5'].append(real_ret_rat_top5)
 		'''
 		real_ret_rat_top5_gt = 0
