@@ -15,7 +15,7 @@
 --dout=0.3
 --lstm_layers=3
 --num_heads=1
---gnn_layers=2
+--gnn_layers=1
 --print_inteval=500
 --mask_type=soft
 --shuffle
