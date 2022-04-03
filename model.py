@@ -47,6 +47,7 @@ class Temporal_Attention_layer(nn.Module):
 class MlpModel(nn.Module):
 	def __init__(self, args):
 		super(MlpModel, self).__init__()
+		self.args = args
 		self.fc1 = nn.Linear(args.input_dim, args.hidden_dim)
 		self.fc2 = nn.Linear(args.hidden_dim, args.hidden_dim)
 		self.fc3 = nn.Linear(args.hidden_dim, args.hidden_dim)
@@ -56,12 +57,25 @@ class MlpModel(nn.Module):
 		self.seq_len = args.num_days
 		self.relu = nn.ReLU()
 
-	def forward(self, x):
+		if self.args.side_info:
+			self.type_embed = nn.Embedding(args.ann_embed_num, args.ann_embed_dim)  # [89,128]
+			self.fuse_type = nn.Linear(args.hidden_dim*2, args.hidden_dim)
+
+	def forward(self, x, side_info=None):
 		assert torch.isnan(x).any() == False
 		batch_size, seq_len, num_stocks, num_features = x.size()
+		
+		if self.args.side_info:
+			side_info, _ = torch.max(self.type_embed(side_info), dim=3)  # values, indices
+			# [batch, num_days, num_stocks, 25, embed_dim] -> [batch, num_days, num_stocks, embed_dim] 
+
 		output = self.relu(self.fc1(x))
 		output = self.relu(self.fc2(output))
 		output = self.relu(self.fc3(output))
+
+		if self.args.side_info:
+			output = self.fuse_type(torch.cat([output, side_info], dim=-1))
+
 		output = self.fc4(output)[:, -1, :, :]
 		return output.reshape((batch_size, num_stocks, -1))
 
@@ -69,6 +83,7 @@ class MlpModel(nn.Module):
 class BaseLSTM(nn.Module):
 	def __init__(self, args):
 		super(BaseLSTM, self).__init__()
+		self.args = args
 		self.input_size, self.hidden_size = args.input_dim, args.hidden_dim
 		self.rnn1 = nn.LSTM(args.input_dim, args.hidden_dim, args.lstm_layers, dropout=args.dout, bidirectional=True, batch_first=True)
 
@@ -79,7 +94,7 @@ class BaseLSTM(nn.Module):
 		self.dropout = nn.Dropout(args.dout)
 		self.seq_len = args.num_days
 
-	def forward(self, x):
+	def forward(self, x, side_info=None):
 		batch_size, seq_len, num_stocks, num_features = x.size()
 		new_x = x.permute((0,2,1,3)).reshape((batch_size*num_stocks, seq_len, num_features))
 		# [batch_size, seq_len, num_stocks, num_features] -> [batch_size*num_stocks, seq_len, num_features]
@@ -101,6 +116,7 @@ class TransformerModel(nn.Module):
 class GNNModel(nn.Module):
 	def __init__(self, args):
 		super(GNNModel, self).__init__()
+		self.args = args
 		self.input_size, self.hidden_size = args.input_dim, args.hidden_dim
 		self.fc1 = nn.Linear(args.input_dim, args.hidden_dim)
 		self.fc2 = nn.Linear(args.hidden_dim, args.hidden_dim)
@@ -114,9 +130,18 @@ class GNNModel(nn.Module):
 		self.seq_len = args.num_days
 		self.relu = nn.LeakyReLU()
 
-	def forward(self, x, edge_indexs, edgenum):
+		if self.args.side_info:
+			self.type_embed = nn.Embedding(args.ann_embed_num, args.ann_embed_dim)  # [89,128]
+			self.fuse_type = nn.Linear(args.hidden_dim*2, args.hidden_dim)
+
+	def forward(self, x, edge_indexs, edgenum, side_info=None):
 		batch_size, seq_len, num_stocks, num_features = x.size()
 		assert batch_size == 1
+
+		if self.args.side_info:
+			side_info, _ = torch.max(self.type_embed(side_info), dim=3)  # values, indices
+			# [batch, num_days, num_stocks, 25, embed_dim] -> [batch, num_days, num_stocks, embed_dim]
+		
 		edge_indexs = edge_indexs.squeeze(0)
 
 		graphs = []
@@ -128,6 +153,10 @@ class GNNModel(nn.Module):
 				
 		output = self.relu(self.fc1(x))  # x: [num_ndoes, input_size]
 		output = self.relu(self.fc2(output))
+
+		if self.args.side_info:
+			output = self.fuse_type(torch.cat([output, side_info], dim=-1))
+
 		output = torch.reshape(output, (seq_len, num_stocks, self.hidden_size))
 
 		new_out = []
@@ -156,7 +185,7 @@ class GLSTM(nn.Module):
 		self.num_layers = args.gnn_layers
 		self.dropout = torch.nn.Dropout(args.dout)
 
-	def forward(self, x, adjs):
+	def forward(self, x, edge_indexs, edgenum, side_info=None):
 		'''
         :param x:   (batch, time, node, feature_size)
         :param adjs: (batch, time, node, node)
@@ -164,17 +193,15 @@ class GLSTM(nn.Module):
         '''
 		batch_size, seq_len, num_stocks, num_features = x.size()
 		assert batch_size == 1
-		x, adjs = x.squeeze(0), adjs.squeeze(0)
+		edge_indexs = edge_indexs.squeeze(0)
 
-		if adjs.size(0) != seq_len:
-			if adjs.size(0) != 2:
-				adjs = adjs.nonzero().t()
-			graphs = [adjs] * seq_len
-		else:
-			graphs = []
-			for i in range(adjs.size(0)):
-				if adjs[i].size(0) != 2:
-					graphs.append(adjs[i].nonzero().t())
+		graphs = []
+		if edge_indexs.size(0) == 2:  # concated edge index [2, n]
+			graphs = torch.split(edge_indexs, edgenum.flatten().tolist(), dim=1)
+		else:  # stacked dense adjs [num_days, stocknum, stocknum]
+			for i in range(edge_indexs.size(0)):
+				graphs.append(edge_indexs[i].nonzero().t())
+
 
 		x = self.input_to_hidden(x)
 		last_h_time_price = torch.squeeze(x[0], 0)  # node feature 
@@ -206,7 +233,7 @@ class BiGLSTM(nn.Module):
 		self.num_layers = args.gnn_layers
 		self.dropout = torch.nn.Dropout(args.dout)
 
-	def forward(self, x, adjs):
+	def forward(self, x, edge_indexs, edgenum, side_info=None):
 		'''
         :param x:   (batch, time, node, feature_size)
         :param adjs: (batch, time, node, node)
@@ -214,17 +241,15 @@ class BiGLSTM(nn.Module):
         '''
 		batch_size, seq_len, num_stocks, num_features = x.size()
 		assert batch_size == 1
-		x, adjs = x.squeeze(0), adjs.squeeze(0)
+		edge_indexs = edge_indexs.squeeze(0)
 
-		if adjs.size(0) != seq_len:
-			if adjs.size(0) != 2:
-				adjs = adjs.nonzero().t()
-			graphs = [adjs] * seq_len
-		else:
-			graphs = []
-			for i in range(adjs.size(0)):
-				if adjs[i].size(0) != 2:
-					graphs.append(adjs[i].nonzero().t())
+		graphs = []
+		if edge_indexs.size(0) == 2:  # concated edge index [2, n]
+			graphs = torch.split(edge_indexs, edgenum.flatten().tolist(), dim=1)
+		else:  # stacked dense adjs [num_days, stocknum, stocknum]
+			for i in range(edge_indexs.size(0)):
+				graphs.append(edge_indexs[i].nonzero().t())
+
 
 		x = self.input_to_hidden(x)
 		# forward pass

@@ -18,13 +18,13 @@ def train(epoch, model, train_dataloader, criterion, optimizer, device, print_in
 	for i, batch in enumerate(train_dataloader):
 		optimizer.zero_grad()
 		if input_graph:
-			(x_train, y_train, mask, g, edgenum) = batch
+			(x_train, y_train, mask, g, edgenum, side_info) = batch
 			# print(x_train.size(), y_train.size(), mask.size(), g.size(), edgenum.size())
 			# torch.Size([1, 8, 1931, 9]) torch.Size([1, 1931, 3]) torch.Size([1, 1931]) torch.Size([1, 2, 6999593]) torch.Size([1, 8]
-			y_pred = model(x_train.to(device), g.to(device), edgenum.to(device))  # [batch_size, num_stocks, 1]
+			y_pred = model(x_train.to(device), g.to(device), edgenum.to(device), side_info.to(device))  # [batch_size, num_stocks, 1]
 		else:
-			(x_train, y_train, mask, day_idx) = batch
-			y_pred = model(x=x_train.to(device))  # [batch_size, num_stocks, 1]
+			(x_train, y_train, mask, side_info) = batch  # (x, y, mask, day_idx) for mask_type==strict
+			y_pred = model(x=x_train.to(device), side_info=side_info.to(device))  # [batch_size, num_stocks, 1]
 
 		# predict percentage change
 		if mask_type == 'strict':
@@ -63,7 +63,7 @@ def train(epoch, model, train_dataloader, criterion, optimizer, device, print_in
 	return running_loss / total_steps
 
 
-def evaluate(model, valid_dataloader, criterion, device, print_inteval, input_graph=True, mask_type='soft', eval_days=126):
+def evaluate(model, valid_dataloader, criterion, device, print_inteval, input_graph=True, mask_type='soft', eval_days=126, top_stocks=5):
 	model.eval()
 	total_steps, running_loss = 0, 0.0
 
@@ -76,11 +76,12 @@ def evaluate(model, valid_dataloader, criterion, device, print_inteval, input_gr
 	with torch.no_grad():
 		for i, batch in enumerate(valid_dataloader):
 			if input_graph:
-				(x_valid, y_valid, mask, g, edgenum) = batch
-				y_pred = model(x_valid.to(device), g.to(device), edgenum.to(device))  # [batch_size, num_stocks, 1]
+				(x_valid, y_valid, mask, g, edgenum, side_info) = batch
+				y_pred = model(x_valid.to(device), g.to(device), edgenum.to(device), side_info.to(device))  # [batch_size, num_stocks, 1]
 			else:
-				(x_valid, y_valid, mask, day_idx) = batch
-				y_pred = model(x_valid.to(device))  # [batch_size, num_stocks, 1]
+				(x_valid, y_valid, mask, side_info) = batch  # (x, y, mask, day_idx) for mask_type==strict
+				y_pred = model(x=x_valid.to(device), side_info=side_info.to(device))  # [batch_size, num_stocks, 1]
+				if mask_type=='strict': day_idx=side_info
 			
 			# predict percentage change
 			if mask_type == 'strict':
@@ -98,14 +99,14 @@ def evaluate(model, valid_dataloader, criterion, device, print_inteval, input_gr
 			total_steps += 1
 
 			if mask_type=='soft':
-				calc_metrics(performances, y_pred.squeeze(-1).detach().cpu(), y_valid[:, :, -1], mask, mask_type=mask_type)
+				calc_metrics(performances, y_pred.squeeze(-1).detach().cpu(), y_valid[:, :, -1], mask, top_stocks=top_stocks, mask_type=mask_type)
 			elif mask_type=='strict':
 				for j in range(y_pred.size(0)):
 					y_dict[int(day_idx[j].item())].append(y_valid[j, : ,-1].item())
 					pred_dict[int(day_idx[j].item())].append(y_pred[j].item())
 		
 		if mask_type == 'strict':
-			calc_metrics(performances, pred_dict, y_dict, mask, mask_type=mask_type)
+			calc_metrics(performances, pred_dict, y_dict, mask, top_stocks=top_stocks, mask_type=mask_type)
 		
 	irr5 = sum(performances['irr5']) - 1 # 收益率，不算复利，每天都投入1……
 	sharpe5 = (np.mean(performances['irr5'])/np.std(performances['irr5']))*15.87 #To annualize,	每日收益率的均值除以波动

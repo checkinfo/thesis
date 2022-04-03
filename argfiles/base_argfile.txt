@@ -6,6 +6,7 @@
 --lr=4e-4
 --adj_path=./data/concepts_graph_1931_233_3.npy
 --sparse_adj_path=./data/icgraph_window_250_0.8/
+--ann_path=./data/ann_type_2431_1931_25.npz
 --model_type=MlpModel
 --dataset_type=TimeDataset
 --seed=10086
