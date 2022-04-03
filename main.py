@@ -62,6 +62,7 @@ if __name__ == "__main__":
 # scp data/train_mask_2305_1931.npy root@182.92.96.52:~/yzs/thesis/data/
 # scp data/test_126_1931_12.npy root@182.92.96.52:~/yzs/thesis/data/
 # scp data/test_mask_126_1931.npy root@182.92.96.52:~/yzs/thesis/data/
+# scp test_mask_126_1931.npy root@172.16.7.18:~/yzs/data/
 # root: Test@Aliyun
 # 8 gpus: 172.16.7.18
 # zip -r icgraph_window_250_0.8.zip icgraph_window250_0.8/
