@@ -27,10 +27,10 @@ if __name__ == "__main__":
 	g.manual_seed(0)  # multiprocessing: each worker has a pytorch seed = base_seed(generator) + worker_id
 	train_dataloader = DataLoader(train_dataset, \
 			batch_size=args.batch_size, shuffle=args.shuffle, num_workers=16, \
-			pin_memory=False, worker_init_fn=seed_worker, generator=g)
+			pin_memory=True, worker_init_fn=seed_worker, generator=g)
 	test_dataloader = DataLoader(test_dataset, \
 			batch_size=args.batch_size, shuffle=False, num_workers=16, \
-			pin_memory=False, worker_init_fn=seed_worker, generator=g)
+			pin_memory=True, worker_init_fn=seed_worker, generator=g)
 
 	model_ = getattr(model, args.model_type)
 	cur_model = model_(args)
@@ -58,7 +58,7 @@ if __name__ == "__main__":
 			save_model(epoch, cur_model, optimzer, ic, args)
 
 # CUBLAS_WORKSPACE_CONFIG=:16:8 or CUBLAS_WORKSPACE_CONFIG=:4096:2
-# CUDA_VISIBLE_DEVICES=0 ignore main.py @argfiles/argfile.txt > ./logs/$(date +"%Y_%m_%d_%I_%M_%S").log
+# CUDA_VISIBLE_DEVICES=0 python main.py @argfiles/argfile.txt > ./logs/$(date +"%Y_%m_%d_%I_%M_%S").log
 # scp data/train_2305_1931_12.npy root@182.92.96.52:~/yzs/thesis/data/
 # scp data/train_mask_2305_1931.npy root@182.92.96.52:~/yzs/thesis/data/
 # scp data/test_126_1931_12.npy root@182.92.96.52:~/yzs/thesis/data/

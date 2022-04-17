@@ -107,6 +107,7 @@ def fill_window(data, window=8):
 	return np.array(data)
 
 
+'''
 def normalize(mx):
 	# row nornalize sparse matrix
 	rowsum = np.array(mx.sum(1), dtype=np.float32)  # m*n -> m*1
@@ -115,6 +116,12 @@ def normalize(mx):
 	r_mat_inv = sp.diags(r_inv)
 	mx = r_mat_inv.dot(mx)
 	return mx
+'''
+
+
+def normalize(mx):
+    # row nornalize torch tensor
+    return torch.nn.functional.normalize(mx, p=1.0, dim=1)
 
 
 def sparse_mx_to_torch_sparse_tensor(sparse_mx):

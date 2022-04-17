@@ -40,17 +40,17 @@ class RGCN(nn.Module):
     def __init__(self, in_features, out_features, relation_num):
         super(RGCN, self).__init__()
         self.relation_num = relation_num
-        self.linear_1 = nn.Linear(in_features, out_features)
-        self.linear_2 = nn.Linear(in_features, out_features)
-        self.linears = [self.linear_1, self.linear_2]
-        self.activation = nn.Tanh()
 
-    def gcn(self, relation, input, adj):
-        support = self.linears[relation](input)
-        output = torch.sparse.mm(adj, support)
+        self.lin_rel = nn.ModuleList([nn.Linear(in_features, out_features, bias=True)]*relation_num)
+        self.lin_root = nn.ModuleList([nn.Linear(in_features, out_features, bias=False)]*relation_num)
+
+    def gcn(self, relation, x, adj):
+        # support = self.linears[relation](x)
+        output = torch.mm(adj, x)
+        output = self.lin_root[relation](x) + self.lin_rel[relation](output)  # add self loop
         return output
 
-    def forward(self, input, adjs):
+    def forward(self, x, adjs):
         '''
         :param input:   (node, hidden)
         :param adjs:    (relationnum, node, node)
@@ -60,9 +60,9 @@ class RGCN(nn.Module):
             adjs = torch.unsqueeze(adjs, 0)
         transform = []
         for r in range(self.relation_num):
-            transform.append(self.gcn(r, input, adjs[r]))
+            transform.append(self.gcn(r, x, adjs[r]))
         # (node, relation, hidden) -> (node, hidden)
-        return self.activation(torch.sum(torch.stack(transform, 1), 1))
+        return torch.sum(torch.stack(transform, 1), 1)
 
 
 class GLSTMCell(nn.Module):
@@ -77,8 +77,8 @@ class GLSTMCell(nn.Module):
         self.U = nn.Linear(input_size, hidden_size * 5, bias=False)
         self.V = nn.Linear(hidden_size, hidden_size * 5)
         self.relu = nn.LeakyReLU()
-        if args.relation_num > 1:
-            self.gnn = RGCN(hidden_size, hidden_size, relation_num)
+        if args.use_adj:
+            self.gnn = nn.ModuleList([RGCN(hidden_size, hidden_size, relation_num)] * args.gnn_layers)
         else:
             self.gnn = nn.ModuleList([GraphConv(in_channels=args.hidden_dim, \
                 out_channels=args.hidden_dim, aggr='mean')] * args.gnn_layers)

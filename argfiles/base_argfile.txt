@@ -11,7 +11,7 @@
 --dataset_type=TimeDataset
 --seed=10086
 --num_days=1
---epochs=20
+--epochs=40
 --hidden_dim=128
 --input_dim=9
 --dout=0.3

@@ -10,7 +10,7 @@ from torch_geometric.data import Data
 from torch_geometric.data import Dataset as PygDataset
 from torch_geometric.utils import to_dense_adj
 
-# from utils import normalize, sparse_mx_to_torch_sparse_tensor, fill_window
+from utils import normalize, sparse_mx_to_torch_sparse_tensor, fill_window
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 
@@ -90,12 +90,17 @@ class AdjTimeDataset(TimeDataset):
 			cur_adj = torch.mul(self.adj, cur_mask.reshape(-1, 1))  # broadcast: [n*n] * [n*1] -> [n*n]
 		else:
 			cur_adj = self.adj
-		if not self.args.use_adj:
+
+		if self.args.use_adj:
+			if self.args.normalize_adj:
+				cur_adj = normalize(cur_adj)
+		else:
 			cur_adj = cur_adj.nonzero().t()
+
 		return (self.data[idx:end_idx, :, self.args.label_cnt:],
 				self.data[end_idx-1, :, :self.args.label_cnt],
 				self.mask[min(end_idx, len(self.data)-1), :],
-				cur_adj if self.args.use_adj else cur_adj.long(),
+				cur_adj.float() if self.args.use_adj else cur_adj.long(),
 				torch.LongTensor([cur_adj.size(1)]),  # meaningless
 				torch.LongTensor([0]))  # meaningless
 
@@ -116,12 +121,17 @@ class AdjAnnTimeDataset(AdjTimeDataset):
 			cur_adj = torch.mul(self.adj, cur_mask.reshape(-1, 1))  # broadcast: [n*n] * [n*1] -> [n*n]
 		else:
 			cur_adj = self.adj
-		if not self.args.use_adj:
+		
+		if self.args.use_adj:
+			if self.args.normalize_adj:
+				cur_adj = normalize(cur_adj)
+		else:
 			cur_adj = cur_adj.nonzero().t()
+		
 		return (self.data[idx:end_idx, :, self.args.label_cnt:],
 				self.data[end_idx-1, :, :self.args.label_cnt],
 				self.mask[min(end_idx, len(self.data)-1), :],
-				cur_adj if self.args.use_adj else cur_adj.long(),
+				cur_adj.float() if self.args.use_adj else cur_adj.long(),
 				torch.LongTensor([cur_adj.size(1)]), # meaningless
 				self.ann[idx:end_idx, :, :])  
 
@@ -141,16 +151,21 @@ class AdjSeqTimeDataset(AdjTimeDataset):
 			cur_mask = self.mask[i, :]  # mask not shifted
 			cur_adj = torch.mul(self.adj, cur_mask.reshape(-1, 1)) \
 				if self.args.mask_adj else self.adj # broadcast: [n*n] * [n*1] -> [n*n]
-			if not self.args.use_adj:
+			
+			if self.args.use_adj:
+				if self.args.normalize_adj:
+					cur_adj = normalize(cur_adj)
+			else:
 				cur_adj = cur_adj.nonzero().t()
 				edgenum.append(cur_adj.size(1))
+
 			adjs.append(cur_adj)
 
 		if self.args.use_adj:  # stacked adjs
 			return (self.data[idx:end_idx, :, self.args.label_cnt:], \
 					self.data[end_idx-1, :, :self.args.label_cnt], \
 					self.mask[min(end_idx, len(self.data)-1), :], \
-					torch.stack(adjs, dim=0).long(), \
+					torch.stack(adjs, dim=0).float(), \
 					torch.LongTensor([1931]),  # meaningless
 					torch.LongTensor([0]))  # meaningless
 		else:  # concated edge index, also return end idx for every edge index
@@ -177,7 +192,11 @@ class AdjAnnSeqTimeDataset(AdjAnnTimeDataset):
 			cur_mask = self.mask[i, :]  # mask not shifted
 			cur_adj = torch.mul(self.adj, cur_mask.reshape(-1, 1)) \
 				if self.args.mask_adj else self.adj # broadcast: [n*n] * [n*1] -> [n*n]
-			if not self.args.use_adj:
+			
+			if self.args.use_adj:
+				if self.args.normalize_adj:
+					cur_adj = normalize(cur_adj)
+			else:
 				cur_adj = cur_adj.nonzero().t()
 				edgenum.append(cur_adj.size(1))
 			adjs.append(cur_adj)
@@ -186,7 +205,7 @@ class AdjAnnSeqTimeDataset(AdjAnnTimeDataset):
 			return (self.data[idx:end_idx, :, self.args.label_cnt:], \
 					self.data[end_idx-1, :, :self.args.label_cnt], \
 					self.mask[min(end_idx, len(self.data)-1), :], \
-					torch.stack(adjs, dim=0).long(), \
+					torch.stack(adjs, dim=0).float(), \
 					torch.LongTensor([1931]),  # meaningless
 					self.ann[idx:end_idx, :, :])  
 		else:  # concated edge index, also return end idx for every edge index
@@ -225,7 +244,11 @@ class SparseAdjSeqTimeDataset(TimeDataset):
 			cur_mask = self.mask[i, :]  # mask not shifted
 			cur_adj = torch.mul(to_dense_adj(self.adj_list[i], max_num_nodes=self.args.stock_num).squeeze(0), cur_mask.reshape(-1, 1)) \
 				if self.args.mask_adj else self.adj # broadcast: [n*n] * [n*1] -> [n*n]
-			if not self.args.use_adj:
+			
+			if self.args.use_adj:
+				if self.args.normalize_adj:
+					cur_adj = normalize(cur_adj)
+			else:
 				cur_adj = cur_adj.nonzero().t()
 				edgenum.append(cur_adj.size(1))
 			adjs.append(cur_adj)
@@ -234,7 +257,7 @@ class SparseAdjSeqTimeDataset(TimeDataset):
 			return (self.data[idx:end_idx, :, self.args.label_cnt:], \
 					self.data[end_idx-1, :, :self.args.label_cnt], \
 					self.mask[min(end_idx, len(self.data)-1), :], \
-					torch.stack(adjs, dim=0).long(), \
+					torch.stack(adjs, dim=0).float(), \
 					torch.LongTensor([1931]),  # meaningless
 					torch.LongTensor([0]))  # meaningless
 		else:  # concated edge index, also return end idx for every edge index
@@ -273,7 +296,11 @@ class SparseAdjAnnSeqTimeDataset(AnnTimeDataset):
 			cur_mask = self.mask[i, :]  # mask not shifted
 			cur_adj = torch.mul(to_dense_adj(self.adj_list[i], max_num_nodes=self.args.stock_num).squeeze(0), cur_mask.reshape(-1, 1)) \
 				if self.args.mask_adj else self.adj # broadcast: [n*n] * [n*1] -> [n*n]
-			if not self.args.use_adj:
+			
+			if self.args.use_adj:
+				if self.args.normalize_adj:
+					cur_adj = normalize(cur_adj)
+			else:
 				cur_adj = cur_adj.nonzero().t()
 				edgenum.append(cur_adj.size(1))
 			adjs.append(cur_adj)
@@ -282,7 +309,7 @@ class SparseAdjAnnSeqTimeDataset(AnnTimeDataset):
 			return (self.data[idx:end_idx, :, self.args.label_cnt:], \
 					self.data[end_idx-1, :, :self.args.label_cnt], \
 					self.mask[min(end_idx, len(self.data)-1), :], \
-					torch.stack(adjs, dim=0).long(), \
+					torch.stack(adjs, dim=0).float(), \
 					torch.LongTensor([1931]),  # meaningless
 					self.ann[idx:end_idx, :, :])  
 		else:  # concated edge index, also return end idx for every edge index

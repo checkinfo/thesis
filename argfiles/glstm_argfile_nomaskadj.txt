@@ -8,8 +8,8 @@
 --model_type=GLSTM
 --dataset_type=AdjTimeDataset
 --seed=10086
---num_days=8
---epochs=20
+--num_days=1
+--epochs=40
 --hidden_dim=128
 --input_dim=9
 --dout=0.3

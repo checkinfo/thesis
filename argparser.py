@@ -31,12 +31,14 @@ def get_parser():
     parser.add_argument('--ann_embed_num', type=int, default=89, help='num of ann type embeddings')
     parser.add_argument('--ann_embed_dim', type=int, default=128, help='ann embedding dimension')
     parser.add_argument('--top_stocks', type=int, default=5, help='portfolio size, top x stocks to invest in each day')
+    parser.add_argument('--glstm_layers', type=int, default=1, help='num of glstm layers')
     parser.add_argument('--mask_type', default='soft', help='soft means dont \
         remove masked data in batch, strict means remove masked data before batching')
     
     parser.add_argument('--shuffle', dest='shuffle', action='store_true', default=False, help='whether to shuffle in dataloader')
     parser.add_argument('--input_graph', dest='input_graph', action='store_true', default=False, help='whether batched data contains graph')
     parser.add_argument('--use_adj', dest='use_adj', action='store_true', default=False, help='whether to load adj in dataloader')
+    parser.add_argument('--normalize_adj', dest='normalize_adj', action='store_true', default=False, help='whether to normalize adj first')
     parser.add_argument('--mask_adj', dest='mask_adj', action='store_true', default=False, help='whether to mask each days adj in dataset')
     parser.add_argument('--side_info', dest='side_info', action='store_true', default=False, help='whether to use side info type embed')
     

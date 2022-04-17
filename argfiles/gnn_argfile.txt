@@ -9,13 +9,13 @@
 --dataset_type=AdjTimeDataset
 --seed=10086
 --num_days=1
---epochs=20
+--epochs=40
 --hidden_dim=128
 --input_dim=9
 --dout=0.3
 --lstm_layers=3
 --num_heads=1
---gnn_layers=1
+--gnn_layers=2
 --print_inteval=500
 --mask_type=soft
 --shuffle

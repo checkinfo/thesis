@@ -15,10 +15,13 @@
 --dout=0.3
 --lstm_layers=1
 --num_heads=1
---gnn_layers=2
+--gnn_layers=1
+--glstm_layers=1
 --print_inteval=500
 --mask_type=soft
 --relation_num=1
 --shuffle
 --input_graph
 --mask_adj
+--use_adj
+--normalize_adj
