@@ -10,6 +10,127 @@ from torch.nn.utils.rnn import pad_packed_sequence as unpack
 from torch_geometric.nn import GINConv, SAGEConv, GraphConv, GATConv
 
 
+class GraphAttentionLayer(nn.Module):
+    """
+    Simple GAT layer, similar to https://arxiv.org/abs/1710.10903
+    """
+    def __init__(self, in_features, out_features, dropout, heads=1, concat=True):
+        super(GraphAttentionLayer, self).__init__()
+        self.dropout = dropout
+        self.in_features = in_features
+        self.out_features = out_features
+        self.heads = heads
+        self.concat = concat
+
+        self.lin_key = nn.Linear(in_features, heads * out_features)
+        self.lin_query = nn.Linear(in_features, heads * out_features)
+        self.lin_value = nn.Linear(in_features, heads * out_features)
+        if self.concat:
+            self.lin_skip = nn.Linear(in_features, heads * out_features)
+        else:
+            self.lin_skip = nn.Linear(in_features, out_features)
+        self.leakyrelu = nn.LeakyReLU()
+
+    def forward(self, h, adj):
+        # [heads, node_num, hid_dim]
+        query = self.lin_query(h).view(-1, self.heads, self.out_features).permute((1,0,2))
+        key = self.lin_key(h).view(-1, self.heads, self.out_features).permute((1,0,2))
+        value = self.lin_value(h).view(-1, self.heads, self.out_features).permute((1,0,2))
+        
+        # [heads, node_num, hid_dim] * [heads, hid_dim, node_num] -> [heads, node, node]
+        alpha = torch.matmul(query, key.transpose(1,2)) / math.sqrt(self.out_features)
+        zero_vec = -9e15*torch.ones_like(alpha)
+        attention = torch.where(adj > 0, alpha, zero_vec)  # [heads, node_num, node_num]
+        attention = F.softmax(attention, dim=-1)  # masked attention
+        attention = F.dropout(attention, self.dropout, training=self.training)
+        
+        # [heads, node_num, node_num] * [heads, node_num, hid_dim] -> [heads, node_num, hid_dim]
+        out = torch.matmul(attention, value)
+        if self.concat:  # [node_num, heads, hid_dim]
+            out = out.view(self.heads, -1, self.out_features).permute((1,0,2))
+        else:  # [node_num, hid_dim]
+            out = torch.mean(out, dim=0)
+        
+        if self.concat:  # [node, heads, hid]
+            out = out + self.lin_skip(h).view(-1, self.heads, self.out_features)
+        else:  # [node, hid]
+            out = out + self.lin_skip(h).view(-1, self.out_features)
+        
+        return out
+
+    def __repr__(self):
+        return self.__class__.__name__ + ' (' + str(self.in_features) + ' -> ' + str(self.out_features) + ')'
+
+'''
+
+class GraphAttentionLayer(nn.Module):
+    """
+    Simple GAT layer, similar to https://arxiv.org/abs/1710.10903
+    """
+    def __init__(self, in_features, out_features, dropout, concat=True):
+        super(GraphAttentionLayer, self).__init__()
+        self.dropout = dropout
+        self.in_features = in_features
+        self.out_features = out_features
+        self.concat = concat
+
+        self.W = nn.Parameter(torch.empty(size=(in_features, out_features)))
+        nn.init.xavier_uniform_(self.W.data, gain=1.414)
+        self.a = nn.Parameter(torch.empty(size=(2*out_features, 1)))
+        nn.init.xavier_uniform_(self.a.data, gain=1.414)
+
+        self.leakyrelu = nn.LeakyReLU()
+
+    def forward(self, h, adj):
+        Wh = torch.mm(h, self.W) # h.shape: (N, in_features), Wh.shape: (N, out_features)
+        e = self._prepare_attentional_mechanism_input(Wh)
+
+        zero_vec = -9e15*torch.ones_like(e)
+        attention = torch.where(adj > 0, e, zero_vec)
+        attention = F.softmax(attention, dim=1)
+        attention = F.dropout(attention, self.dropout, training=self.training)
+        h_prime = torch.matmul(attention, Wh)
+
+        if self.concat:
+            return F.elu(h_prime)
+        else:
+            return h_prime
+
+    def _prepare_attentional_mechanism_input(self, Wh):
+        # Wh.shape (N, out_feature)
+        # self.a.shape (2 * out_feature, 1)
+        # Wh1&2.shape (N, 1)
+        # e.shape (N, N)
+        Wh1 = torch.matmul(Wh, self.a[:self.out_features, :])
+        Wh2 = torch.matmul(Wh, self.a[self.out_features:, :])
+        # broadcast add
+        e = Wh1 + Wh2.T
+        return self.leakyrelu(e)
+
+    def __repr__(self):
+        return self.__class__.__name__ + ' (' + str(self.in_features) + ' -> ' + str(self.out_features) + ')'
+'''
+
+class GAT(nn.Module):
+    def __init__(self, nfeat, nhid, nclass, dropout, nheads):
+        """Dense version of GAT."""
+        super(GAT, self).__init__()
+        self.dropout = dropout
+
+        self.attentions = [GraphAttentionLayer(nfeat, nhid, dropout=dropout, concat=True) for _ in range(nheads)]
+        for i, attention in enumerate(self.attentions):
+            self.add_module('attention_{}'.format(i), attention)
+
+        self.out_att = GraphAttentionLayer(nhid * nheads, nclass, dropout=dropout, concat=False)
+
+    def forward(self, x, adj):
+        x = F.dropout(x, self.dropout, training=self.training)
+        x = torch.cat([att(x, adj) for att in self.attentions], dim=1)
+        x = F.dropout(x, self.dropout, training=self.training)
+        x = F.elu(self.out_att(x, adj))
+        return F.log_softmax(x, dim=1)
+
+
 class Attentive_Pooling(nn.Module):
     def __init__(self, hidden_size):
         super(Attentive_Pooling, self).__init__()
@@ -37,17 +158,22 @@ class Attentive_Pooling(nn.Module):
 
 
 class RGCN(nn.Module):
-    def __init__(self, in_features, out_features, relation_num):
+    def __init__(self, in_features, out_features, dout, relation_num, use_attn=False, heads=1):
         super(RGCN, self).__init__()
         self.relation_num = relation_num
-
+        self.use_attn = use_attn
+        if self.use_attn:
+            self.attention = nn.ModuleList([GraphAttentionLayer(in_features, in_features, dout, heads)] * relation_num)
         self.lin_rel = nn.ModuleList([nn.Linear(in_features, out_features, bias=True)]*relation_num)
         self.lin_root = nn.ModuleList([nn.Linear(in_features, out_features, bias=False)]*relation_num)
 
     def gcn(self, relation, x, adj):
         # support = self.linears[relation](x)
-        output = torch.mm(adj, x)
-        output = self.lin_root[relation](x) + self.lin_rel[relation](output)  # add self loop
+        if self.use_attn:
+            output = self.attention[relation](x, adj)
+        else:
+            output = torch.mm(adj, x)
+            output = self.lin_root[relation](x) + self.lin_rel[relation](output)  # add self loop
         return output
 
     def forward(self, x, adjs):
@@ -72,13 +198,13 @@ class GLSTMCell(nn.Module):
         self.args = args
         self.dropout = torch.nn.Dropout(dropout)
         self.Wh = nn.Linear(hidden_size, hidden_size * 5, bias=False)
-        self.Wn = nn.Linear(hidden_size, hidden_size * 5, bias=False)
+        self.Wn = nn.Linear(hidden_size*args.num_heads, hidden_size * 5, bias=False)
         self.Wt = nn.Linear(hidden_size, hidden_size * 5, bias=False)
         self.U = nn.Linear(input_size, hidden_size * 5, bias=False)
         self.V = nn.Linear(hidden_size, hidden_size * 5)
         self.relu = nn.LeakyReLU()
         if args.use_adj:
-            self.gnn = nn.ModuleList([RGCN(hidden_size, hidden_size, relation_num)] * args.gnn_layers)
+            self.gnn = nn.ModuleList([RGCN(hidden_size if i==0 else hidden_size*args.num_heads, hidden_size, dropout, relation_num, use_attn=args.graph_attn, heads=args.num_heads) for i in range(args.gnn_layers)])
         else:
             self.gnn = nn.ModuleList([GraphConv(in_channels=args.hidden_dim, \
                 out_channels=args.hidden_dim, aggr='mean')] * args.gnn_layers)
@@ -95,8 +221,12 @@ class GLSTMCell(nn.Module):
         :param adj:   (node, node)
             if use RGCN, there should be multiple gcns, each one for a relation
         '''
+        num_stocks = h.size(0)
+        hn = h
         for i in range(len(self.gnn)):
-            hn = self.relu(self.gnn[i](h, adjs))  # input: x, edge_index
+            hn = self.relu(self.gnn[i](hn, adjs))  # input: x, edge_index
+            hn = torch.reshape(hn, (num_stocks, -1))
+        
         # hn = self.gnn[0](h, adjs)
         # h: 同一个时间片上一层的，h_t：上一个时间片最后一层
         gates = self.Wh(self.dropout(h)) + self.U(self.dropout(x)) + self.Wn(self.dropout(hn)) + self.Wt(self.dropout(h_t))

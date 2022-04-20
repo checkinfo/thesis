@@ -11,6 +11,35 @@ from sklearn.metrics import ndcg_score
 
 from utils import *
 
+
+def weighted_mse_loss(input, target, weight):
+	# reduction: Reduction.SUM_BY_NONZERO_WEIGHTS
+    # return torch.mean(weight * (input - target) ** 2)  ##EDIT HERE make it div by trch.sum(mask)
+	print(torch.mean(weight * (input - target) ** 2), (weight * (input - target) ** 2) / torch.sum(weight))
+	return (weight * (input - target) ** 2) / torch.sum(weight)
+
+def trr_loss_mse_rank(pred, ground_truth, mask, alpha, num_stocks, device):
+	# pred == return ratio 
+    return_ratio = pred
+    reg_loss = weighted_mse_loss(return_ratio, ground_truth, mask)
+    all_ones = torch.ones((num_stocks,1)).to(device)
+    pre_pw_dif =  (torch.matmul(return_ratio, torch.transpose(all_ones, 0, 1)) 
+                    - torch.matmul(all_ones, torch.transpose(return_ratio, 0, 1)))
+    gt_pw_dif = (
+            torch.matmul(all_ones, torch.transpose(ground_truth,0,1)) -
+            torch.matmul(ground_truth, torch.transpose(all_ones, 0,1))
+        )
+
+    mask_pw = torch.matmul(mask, torch.transpose(mask, 0,1))
+    rank_loss = torch.mean(
+            F.relu(
+                ((pre_pw_dif*gt_pw_dif)*mask_pw)))
+    loss = reg_loss + alpha*rank_loss
+    # print(return_ratio)
+    del mask_pw, gt_pw_dif, pre_pw_dif, all_ones
+    return loss, reg_loss, rank_loss
+
+
 def train(epoch, model, train_dataloader, criterion, optimizer, device, print_inteval, input_graph=True, mask_type='soft'):
 	model.train()
 	total_steps, running_loss = 0, 0.0

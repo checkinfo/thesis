@@ -1,0 +1,130 @@
+Namespace(adj_path='./data/concepts_graph_1931_233_3.npy', ann_embed_dim=128, ann_embed_num=89, ann_path=None, batch_size=1, dataset_type='RGCNSeqTimeDataset', dout=0.3, epochs=60, glstm_layers=1, gnn_layers=1, gpu=0, graph_attn=True, hidden_dim=128, inner_prod=False, input_dim=9, input_graph=True, label_cnt=3, lr=0.001, lstm_layers=1, mask_adj=True, mask_type='soft', model_type='BiGLSTM', normalize_adj=True, num_days=8, num_heads=1, print_inteval=500, relation_num=2, seed=10086, shuffle=True, side_info=False, sparse_adj_path='../data/icgraph_window_250_0.8/', stock_num=1931, test_mask_path='./data/test_mask_126_1931.npy', test_path='./data/test_126_1931_12.npy', top_stocks=5, train_mask_path='./data/train_mask_2305_1931.npy', train_path='./data/train_2305_1931_12.npy', use_adj=True)
+load 2305 train graphs successful!
+load 126 test graphs successful!
+13465
+BiGLSTM(
+  (input_to_hidden): Linear(in_features=9, out_features=128, bias=True)
+  (forward_cells): ModuleList(
+    (0): GLSTMCell(
+      (dropout): Dropout(p=0.3, inplace=False)
+      (Wh): Linear(in_features=128, out_features=640, bias=False)
+      (Wn): Linear(in_features=128, out_features=640, bias=False)
+      (Wt): Linear(in_features=128, out_features=640, bias=False)
+      (U): Linear(in_features=128, out_features=640, bias=False)
+      (V): Linear(in_features=128, out_features=640, bias=True)
+      (relu): LeakyReLU(negative_slope=0.01)
+      (gnn): ModuleList(
+        (0): RGCN(
+          (attention): ModuleList(
+            (0): GraphAttentionLayer (128 -> 128)
+            (1): GraphAttentionLayer (128 -> 128)
+          )
+          (lin_rel): ModuleList(
+            (0): Linear(in_features=128, out_features=128, bias=True)
+            (1): Linear(in_features=128, out_features=128, bias=True)
+          )
+          (lin_root): ModuleList(
+            (0): Linear(in_features=128, out_features=128, bias=False)
+            (1): Linear(in_features=128, out_features=128, bias=False)
+          )
+        )
+      )
+    )
+  )
+  (backward_cells): ModuleList(
+    (0): GLSTMCell(
+      (dropout): Dropout(p=0.3, inplace=False)
+      (Wh): Linear(in_features=128, out_features=640, bias=False)
+      (Wn): Linear(in_features=128, out_features=640, bias=False)
+      (Wt): Linear(in_features=128, out_features=640, bias=False)
+      (U): Linear(in_features=128, out_features=640, bias=False)
+      (V): Linear(in_features=128, out_features=640, bias=True)
+      (relu): LeakyReLU(negative_slope=0.01)
+      (gnn): ModuleList(
+        (0): RGCN(
+          (attention): ModuleList(
+            (0): GraphAttentionLayer (128 -> 128)
+            (1): GraphAttentionLayer (128 -> 128)
+          )
+          (lin_rel): ModuleList(
+            (0): Linear(in_features=128, out_features=128, bias=True)
+            (1): Linear(in_features=128, out_features=128, bias=True)
+          )
+          (lin_root): ModuleList(
+            (0): Linear(in_features=128, out_features=128, bias=False)
+            (1): Linear(in_features=128, out_features=128, bias=False)
+          )
+        )
+      )
+    )
+  )
+  (fc0): ModuleList(
+    (0): Linear(in_features=256, out_features=128, bias=True)
+  )
+  (w_out): Linear(in_features=128, out_features=1, bias=True)
+  (dropout): Dropout(p=0.3, inplace=False)
+)
+train 0, step: 0, loss: 4.931181358116692, grad_norm: 4.941579925469582, ic: -0.03934702255174804
+train 0, step: 500, loss: 0.8657118934568104, grad_norm: 0.024000769149039373, ic: 0.015931687211995574
+train 0, step: 1000, loss: 1.9383547600813826, grad_norm: 0.42031877271386947, ic: -0.00220310571150094
+train 0, step: 1500, loss: 0.9412842761857707, grad_norm: 0.017509979703034584, ic: -0.008647609169830914
+train 0, step: 2000, loss: 1.0000299683056606, grad_norm: 0.13050816388117709, ic: -0.034315289829609845
+Epoch 0: 2022-04-20 20:27:39.108506: train loss: 1.6491399209985251
+Eval step 0: eval loss: 0.8360690889670047
+Eval: 2022-04-20 20:28:00.707314: total loss: 1.0792398823542981, mse:4.823304327707958, ic :0.010017821195492481, sharpe5:7.964485450387, irr5:222.44126892089844, ndcg5:0.8557820660523122, pnl5:2.7981982231140137 
+train 1, step: 0, loss: 2.7647352649319554, grad_norm: 0.7380803627849992, ic: 0.06464270585978596
+train 1, step: 500, loss: 1.7499609743746067, grad_norm: 0.6531415105625038, ic: 0.16684969202754596
+train 1, step: 1000, loss: 0.8748312675417579, grad_norm: 0.1502927065375155, ic: 0.054248921417271105
+train 1, step: 1500, loss: 1.7073882004310346, grad_norm: 0.179880772525779, ic: 0.004105263718491445
+train 1, step: 2000, loss: 2.1732308593750003, grad_norm: 0.8096639496449339, ic: 0.02833958832201782
+Epoch 1: 2022-04-20 20:33:36.207583: train loss: 1.6467313332040987
+Eval step 0: eval loss: 0.835589683219178
+Eval: 2022-04-20 20:33:57.845040: total loss: 1.07909740991294, mse:4.823344878354672, ic :0.01994235962036176, sharpe5:9.489228782057761, irr5:264.4228820800781, ndcg5:0.8548481462866093, pnl5:2.108813762664795 
+train 2, step: 0, loss: 2.141236505681818, grad_norm: 0.0069661169242969095, ic: 0.08331588280441336
+train 2, step: 500, loss: 3.293003518070227, grad_norm: 0.2559359049376438, ic: -0.00719491257469103
+train 2, step: 1000, loss: 2.0740399006226053, grad_norm: 1.7160941469057538e-05, ic: 0.32581885537653116
+train 2, step: 1500, loss: 1.4799523273497137, grad_norm: 0.050741728714936256, ic: -0.02281483301330753
+train 2, step: 2000, loss: 3.2174312650240386, grad_norm: 0.7280356548525804, ic: 0.13236151145820207
+Epoch 2: 2022-04-20 20:39:34.937549: train loss: 1.6466340131912378
+Eval step 0: eval loss: 0.8365393619517254
+Eval: 2022-04-20 20:39:56.242900: total loss: 1.079365354354336, mse:4.822311154916883, ic :0.029083802306891702, sharpe5:11.492695657610893, irr5:379.8939208984375, ndcg5:0.8481449225697667, pnl5:2.5716359615325928 
+train 3, step: 0, loss: 1.5227575782837905, grad_norm: 0.4937370274586311, ic: -0.012617778000457236
+train 3, step: 500, loss: 1.4923865214491974, grad_norm: 0.32422954766652395, ic: 0.046313047744593806
+train 3, step: 1000, loss: 3.684754436978267, grad_norm: 0.6792017764576842, ic: -0.014297092529283377
+train 3, step: 1500, loss: 1.9628195005626023, grad_norm: 0.9523318463210616, ic: 0.034705466206637954
+train 3, step: 2000, loss: 0.9024455632390203, grad_norm: 0.007209227341516935, ic: 0.023090073524967718
+Epoch 3: 2022-04-20 20:45:29.822025: train loss: 1.6476220291357544
+Eval step 0: eval loss: 0.8358008301295772
+Eval: 2022-04-20 20:45:51.274119: total loss: 1.079148669957412, mse:4.822873415498642, ic :0.07315941378790189, sharpe5:11.552017496824265, irr5:401.4085693359375, ndcg5:0.8480342173065066, pnl5:3.39528226852417 
+train 4, step: 0, loss: 1.4389546795280612, grad_norm: 0.042316599147398826, ic: 0.15407220761427898
+train 4, step: 500, loss: 1.644894577386811, grad_norm: 0.5494062682333668, ic: -0.10956361169086391
+train 4, step: 1000, loss: 2.928001031643007, grad_norm: 0.724898847421637, ic: -0.026607001898798915
+train 4, step: 1500, loss: 2.166221650843882, grad_norm: 0.46839169779317874, ic: -0.052890316249144594
+train 4, step: 2000, loss: 1.0890918690160867, grad_norm: 0.39494290907325474, ic: 0.19472402617177498
+Epoch 4: 2022-04-20 20:51:26.322249: train loss: 1.6425342165479395
+Eval step 0: eval loss: 0.8438476948391398
+Eval: 2022-04-20 20:51:48.085155: total loss: 1.0823735966099206, mse:4.6958647903461035, ic :0.1309291738465533, sharpe5:11.691813966035843, irr5:404.6680908203125, ndcg5:0.8322972485221346, pnl5:3.371065855026245 
+train 5, step: 0, loss: 1.3115657115142616, grad_norm: 0.13585107040463512, ic: 0.42523283111668303
+train 5, step: 500, loss: 0.8663471412507434, grad_norm: 0.02264690999246451, ic: 0.9446005971064781
+train 5, step: 1000, loss: 0.9874896170079024, grad_norm: 0.15830306765621113, ic: -0.010606464225876515
+train 5, step: 1500, loss: 1.5279439134583175, grad_norm: 0.15126129215629133, ic: 0.005573127226570489
+train 5, step: 2000, loss: 1.1076330198212732, grad_norm: 0.028228720401884917, ic: 0.1533777950320354
+Epoch 5: 2022-04-20 20:57:24.853568: train loss: 1.6356041603137164
+Eval step 0: eval loss: 0.8365144719565002
+Eval: 2022-04-20 20:57:46.275873: total loss: 1.0800351374060142, mse:4.752194522265171, ic :0.12636262926308464, sharpe5:11.426718285083771, irr5:395.7353515625, ndcg5:0.8525521392307881, pnl5:3.2161903381347656 
+train 6, step: 0, loss: 1.3361547734748804, grad_norm: 0.4188019465028514, ic: 0.052690186648603234
+train 6, step: 500, loss: 1.01349596663237, grad_norm: 0.041542884324413956, ic: -0.032695412576949134
+train 6, step: 1000, loss: 1.097660520140209, grad_norm: 0.07959888826629771, ic: 0.8017143675455511
+train 6, step: 1500, loss: 1.5790753325154958, grad_norm: 0.6903369486674737, ic: 0.000979392105154752
+train 6, step: 2000, loss: 0.7882831167277572, grad_norm: 0.03859751794012489, ic: 0.35698722196006627
+Epoch 6: 2022-04-20 21:03:18.585185: train loss: 1.6340907290953546
+Eval step 0: eval loss: 0.8291554586653714
+Eval: 2022-04-20 21:03:40.131316: total loss: 1.0724025752421824, mse:4.635812228851341, ic :0.13963485986297175, sharpe5:11.126358493566512, irr5:385.2162780761719, ndcg5:0.8449581832892485, pnl5:3.171865940093994 
+train 7, step: 0, loss: 0.9976425170898438, grad_norm: 0.05491826233657241, ic: 0.014374944004196614
+train 7, step: 500, loss: 0.6529986720679378, grad_norm: 0.002663689188924537, ic: 0.05010899489948829
+train 7, step: 1000, loss: 1.0315318866622238, grad_norm: 0.20069077342280556, ic: 0.0069937765063615015
+train 7, step: 1500, loss: 2.2420006656953375, grad_norm: 0.6853808429156104, ic: 0.4239584675274819
+train 7, step: 2000, loss: 0.907462814898021, grad_norm: 0.03467677248445042, ic: -0.0025508080765625427
+Epoch 7: 2022-04-20 21:09:17.793813: train loss: 1.6334858126976315
+Eval step 0: eval loss: 0.8336709025536748
+Eval: 2022-04-20 21:09:39.205281: total loss: 1.0777940062314624, mse:4.712330414686822, ic :0.12836026764261868, sharpe5:11.633116437792777, irr5:404.2041320800781, ndcg5:0.8505730186873981, pnl5:3.181657314300537 

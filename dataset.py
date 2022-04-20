@@ -217,11 +217,11 @@ class AdjAnnSeqTimeDataset(AdjAnnTimeDataset):
 					self.ann[idx:end_idx, :, :]) 
 
 
-class SparseAdjSeqTimeDataset(TimeDataset):
+class SparseAdjTimeDataset(TimeDataset):
 	def __init__(self, data_path, mask_path, dataset_type, args) -> None:
 		super().__init__(data_path, mask_path, dataset_type, args)
 		self.adj_list = self.load_graphs(args.sparse_adj_path)  # list of edge indexs
-
+	
 	def load_graphs(self, graph_path):
 		adj_list = []
 		st = 0 if self.dataset_type == "train" else 2305
@@ -232,6 +232,35 @@ class SparseAdjSeqTimeDataset(TimeDataset):
 		assert len(adj_list) == total_days
 		print(f"load {len(adj_list)} {self.dataset_type} graphs successful!")
 		return adj_list
+
+	def __len__(self) -> int:
+		return super().__len__()
+	
+	def __getitem__(self, idx) -> Tuple[torch.Tensor]:
+		# returns (x, y, mask, adj, end_idx, ann placeholder)
+		end_idx = idx + self.days
+		cur_mask = self.mask[end_idx-1, :]  # mask not shifted
+		cur_adj = to_dense_adj(self.adj_list[end_idx-1], max_num_nodes=self.args.stock_num).squeeze(0),
+		if self.args.mask_adj:
+			cur_adj = torch.mul(cur_adj, cur_mask.reshape(-1, 1))  # broadcast: [n*n] * [n*1] -> [n*n]
+
+		if self.args.use_adj:
+			if self.args.normalize_adj:
+				cur_adj = normalize(cur_adj)
+		else:
+			cur_adj = cur_adj.nonzero().t()
+
+		return (self.data[idx:end_idx, :, self.args.label_cnt:],
+				self.data[end_idx-1, :, :self.args.label_cnt],
+				self.mask[min(end_idx, len(self.data)-1), :],
+				cur_adj.float() if self.args.use_adj else cur_adj.long(),
+				torch.LongTensor([cur_adj.size(1)]),  # meaningless
+				torch.LongTensor([0]))  # meaningless
+
+
+class SparseAdjSeqTimeDataset(SparseAdjTimeDataset):
+	def __init__(self, data_path, mask_path, dataset_type, args) -> None:
+		super().__init__(data_path, mask_path, dataset_type, args)
 
 	def __len__(self) -> int:
 		return super().__len__()
@@ -269,21 +298,10 @@ class SparseAdjSeqTimeDataset(TimeDataset):
 					torch.LongTensor([0]))
 
 
-class SparseAdjAnnSeqTimeDataset(AnnTimeDataset):
+class SparseAdjAnnSeqTimeDataset(SparseAdjTimeDataset):
 	def __init__(self, data_path, mask_path, dataset_type, args) -> None:
 		super().__init__(data_path, mask_path, dataset_type, args)
-		self.adj_list = self.load_graphs(args.sparse_adj_path)  # list of edge indexs
-
-	def load_graphs(self, graph_path):
-		adj_list = []
-		st = 0 if self.dataset_type == "train" else 2305
-		total_days = 2305 if self.dataset_type=='train' else 126
-		for i in range(st, st+total_days):
-			adj = np.load(os.path.join(graph_path, f"date_{st}.npz"))['adj']
-			adj_list.append(torch.from_numpy(adj).long())  # edge index should be longtensor
-		assert len(adj_list) == total_days
-		print(f"load {len(adj_list)} {self.dataset_type} graphs successful!")
-		return adj_list
+		self.ann = torch.from_numpy(np.load(args.ann_path)['data']).long()
 
 	def __len__(self) -> int:
 		return super().__len__()
@@ -319,6 +337,73 @@ class SparseAdjAnnSeqTimeDataset(AnnTimeDataset):
 					torch.cat(adjs, dim=1).long(), \
 					torch.LongTensor(edgenum),
 					self.ann[idx:end_idx, :, :])
+
+
+class RGCNTimeDataset(SparseAdjSeqTimeDataset):
+	def __init__(self, data_path, mask_path, dataset_type, args) -> None:
+		super().__init__(data_path, mask_path, dataset_type, args)
+
+	def __len__(self) -> int:
+		return super().__len__()
+	
+	def __getitem__(self, idx) -> Tuple[torch.Tensor]:
+		# returns (x, y, mask, adjs, end_idx)
+		# adjs shape: [rel_nums, nodes, nodes]
+		end_idx = idx + self.days
+		cur_mask = self.mask[end_idx-1, :]  # mask not shifted
+		cur_adj1 = self.adj
+		cur_adj2 = to_dense_adj(self.adj_list[end_idx-1], max_num_nodes=self.args.stock_num).squeeze(0),
+		if self.args.mask_adj:
+			cur_adj1, cur_adj2 = torch.mul(cur_adj1, cur_mask.reshape(-1, 1)), torch.mul(cur_adj2, cur_mask.reshape(-1, 1))  # broadcast: [n*n] * [n*1] -> [n*n]
+
+		if self.args.use_adj and self.args.normalize_adj:
+			cur_adj1, cur_adj2 = normalize(cur_adj1), normalize(cur_adj2)
+		else:
+			raise NotImplementedError("need to set --use_adj  and --normalize_adj in argfile")
+
+		cur_adj = torch.stack((cur_adj1, cur_adj2), dim=0)
+
+		return (self.data[idx:end_idx, :, self.args.label_cnt:],
+				self.data[end_idx-1, :, :self.args.label_cnt],
+				self.mask[min(end_idx, len(self.data)-1), :],
+				cur_adj.float(),
+				torch.LongTensor([cur_adj.size(1)]),  # meaningless
+				torch.LongTensor([0]))  # meaningless
+
+
+class RGCNSeqTimeDataset(SparseAdjSeqTimeDataset):
+	def __init__(self, data_path, mask_path, dataset_type, args) -> None:
+		super().__init__(data_path, mask_path, dataset_type, args)
+		self.adj = torch.from_numpy(np.load(args.adj_path).astype('float32'))
+
+	def __len__(self) -> int:
+		return super().__len__()
+
+	def __getitem__(self, idx ) -> Tuple[torch.Tensor]:
+		# returns (x, y, mask, adjs, end_idxs)
+		# adjs shape: [num_days, rel_nums, nodes, nodes]
+		end_idx = idx + self.days
+		adjs, edgenum = [], []
+		for i in range(idx, end_idx):  # [idx, end_idx-1]
+			cur_mask = self.mask[i, :]  # mask not shifted
+			cur_adj1 = torch.mul(self.adj, cur_mask.reshape(-1, 1)) \
+				if self.args.mask_adj else self.adj # broadcast: [n*n] * [n*1] -> [n*n]
+			cur_adj2 = torch.mul(to_dense_adj(self.adj_list[i], max_num_nodes=self.args.stock_num).squeeze(0), cur_mask.reshape(-1, 1)) \
+				if self.args.mask_adj else self.adj # broadcast: [n*n] * [n*1] -> [n*n]
+			
+			if self.args.use_adj and self.args.normalize_adj:
+				cur_adj1, cur_adj2 = normalize(cur_adj1), normalize(cur_adj2)
+			else:
+				raise NotImplementedError("need to set --use_adj  and --normalize_adj in argfile")
+			adjs.append(torch.stack((cur_adj1, cur_adj2), dim=0))
+			
+		# return stacked adjs
+		return (self.data[idx:end_idx, :, self.args.label_cnt:], \
+				self.data[end_idx-1, :, :self.args.label_cnt], \
+				self.mask[min(end_idx, len(self.data)-1), :], \
+				torch.stack(adjs, dim=0).float(), \
+				torch.LongTensor([1931]),  # meaningless
+				torch.LongTensor([0]))  # meaningless
 
 
 class GraphDataset(PygDataset):

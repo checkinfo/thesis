@@ -1,4 +1,5 @@
 import os
+from turtle import forward
 import torch
 import datetime
 import numpy as np
@@ -8,7 +9,7 @@ from scipy.stats import pearsonr
 from collections import namedtuple
 from torch_geometric.nn import GINConv, SAGEConv, GraphConv, GATConv
 
-from gclstm import GLSTMCell, RGCN
+from gclstm import GLSTMCell, RGCN, GraphAttentionLayer, GAT
 
 
 class Temporal_Attention_layer(nn.Module):
@@ -112,7 +113,6 @@ class TransformerModel(nn.Module):
 		super().__init__()
 
 
-
 class GNNModel(nn.Module):
 	def __init__(self, args):
 		super(GNNModel, self).__init__()
@@ -181,10 +181,10 @@ class RGCNModel(nn.Module):
 		self.input_size, self.hidden_size = args.input_dim, args.hidden_dim
 		self.fc1 = nn.Linear(args.input_dim, args.hidden_dim)
 		self.fc2 = nn.Linear(args.hidden_dim, args.hidden_dim)
-		self.fc3 = nn.Linear(args.hidden_dim*args.num_heads, args.hidden_dim)
+		self.fc3 = nn.Linear(args.hidden_dim*(args.num_heads**args.gnn_layers), args.hidden_dim)  # TODO
 		self.fc4 = nn.Linear(args.hidden_dim, 1)
 
-		self.gnns = nn.ModuleList([RGCN(args.hidden_dim, args.hidden_dim, args.relation_num)] * args.gnn_layers)
+		self.gnns = nn.ModuleList([RGCN(args.hidden_dim if i==0 else args.hidden_dim*args.num_heads, args.hidden_dim, args.dout, args.relation_num, args.graph_attn, args.num_heads) for i in range(args.gnn_layers)])
 
 		self.dropout = nn.Dropout(args.dout)
 		self.seq_len = args.num_days
@@ -213,8 +213,9 @@ class RGCNModel(nn.Module):
 
 		new_out = []
 		for i in range(seq_len):
+			out = output[i]
 			for j in range(len(self.gnns)):
-				out = self.relu(self.gnns[j](output[i], adjs[i]))  # input: x, edge_index
+				out = self.relu(self.gnns[j](out, adjs[i]))  # input: x, edge_index
 				out = torch.reshape(out, (num_stocks, -1))
 			new_out.append(out)
 
@@ -341,6 +342,89 @@ class BiGLSTM(nn.Module):
 
 		return self.w_out(self.dropout(out[-1])).reshape(batch_size, num_stocks, 1)
 
+
+class ReRaLSTM(nn.Module):
+	def __init__(self, args) -> None:
+		super().__init__()
+		self.args = args
+		self.input_size, self.hidden_size = args.input_dim, args.hidden_dim
+		self.rnn1 = nn.LSTM(args.input_dim, args.hidden_dim, args.lstm_layers, dropout=args.dout, bidirectional=True, batch_first=True)
+
+		self.fc0 = nn.Linear(2*args.hidden_dim, args.hidden_dim)
+		self.fc1 = nn.Linear(824, 1)
+		self.fc2 = nn.Linear(args.hidden_dim, 1)
+		self.fc3 = nn.Linear(args.hidden_dim, 1)
+
+		self.predict = nn.Linear(args.hidden_dim*2, 1)
+
+		self.relu = nn.LeakyReLU()
+		self.dropout = nn.Dropout(args.dout)
+		self.seq_len = args.num_days
+
+		# relation data
+		self.all_one = nn.Parameter(torch.ones((args.stock_num, 1)))
+		self.rel_encoding, self.rel_mask = self.load_relation_data(args.adj_path)
+		self.rel_encoding, self.rel_mask = nn.Parameter(self.rel_encoding, requires_grad=False), nn.Parameter(self.rel_mask, requires_grad=False)
+
+		print('relation encoding shape:', self.rel_encoding.shape, self.rel_encoding.dtype)
+		print('relation mask shape:', self.rel_mask.shape, self.rel_mask.dtype)
+	
+	def load_relation_data(self, relation_file):
+		relation_encoding = np.load(relation_file)
+		rel_shape = [relation_encoding.shape[0], relation_encoding.shape[1]]
+		mask_flags = np.equal(np.zeros(rel_shape, dtype=int),
+							np.sum(relation_encoding, axis=2))
+		mask = np.where(mask_flags, np.ones(rel_shape) * -1e9, np.zeros(rel_shape))
+		return torch.from_numpy(relation_encoding), torch.from_numpy(mask).float()
+
+	def forward(self, x, side_info=None):
+		batch_size, seq_len, num_stocks, num_features = x.size()
+
+		new_x = x.permute((0,2,1,3)).reshape((batch_size*num_stocks, seq_len, num_features))
+		# [batch_size, seq_len, num_stocks, num_features] -> [batch_size*num_stocks, seq_len, num_features]
+
+		out_rnn, state = self.rnn1(new_x)
+		out_rnn = out_rnn[:, -1, :]
+		out_rnn = self.relu(self.dropout(self.fc0(out_rnn)))
+
+		output = out_rnn.reshape((batch_size, num_stocks, -1))  # batch_size == 1
+		# [batch_size*num_stocks, hidden_dim] -> [batch, num_stocks, hidden_dim]
+
+		rel_weight = self.relu(self.fc1(self.rel_encoding))
+		# [num_stocks, num_stocks, xxx] -> [num_stocks, num_stocks, 1]
+		
+		if self.args.inner_prod: # explicit
+			# print('rsr: inner product weight')
+			# [batch, num_stocks, hid] * [batch, hid, num_stocks] -> [batch, num_stocks, num_stocks]
+			inner_weight = torch.matmul(output, output.transpose(1, 2))
+			# [batch, num_stocks, num_stocks]*[num_stocks, num_stocks] -> [batch, num_stocks, num_stocks]
+			weight = torch.mul(inner_weight, rel_weight[:,:, -1])
+		else:  # implcit
+			# print('rsr: sum weight')
+			head_weight = self.relu(self.fc2(output))
+			tail_weight = self.relu(self.fc3(output))
+			# [batch, num_stocks, 1]*[1, num_stocks] + [num_stocks, 1]*[batch, 1, num_stocks] + [num_stocks, num_stocks]
+			# print(head_weight.size(), tail_weight.size(), self.all_one.size())
+			weight = torch.matmul(head_weight, self.all_one.transpose(0, 1)) + \
+					torch.matmul(self.all_one, tail_weight.transpose(1, 2)) + \
+					rel_weight[:, :, -1]
+		
+		# [batch, num_stocks, num_stocks]
+		weight_masked = F.softmax(self.rel_mask + weight, dim=-1)
+		# [batch, num_stocks, num_stocks] * [batch, num_stocks, hid] -> [batch, num_stocks, hid]
+		outputs_proped = torch.matmul(weight_masked, output)
+		outputs_concated = torch.concat([output, outputs_proped], axis=-1)
+		
+		prediction = self.relu(self.predict(outputs_concated))  # [num_stocks, 1]
+		return prediction.reshape((batch_size, num_stocks, -1))
+
+
+class HYperStockGAT(nn.Module):
+	def __init__(self) -> None:
+		super().__init__()
+
+	def forward(self, ):
+		pass
 
 class HypModel(nn.Module):
 	def __init__(self, input_size, hidden_size, graph_path, use_hyp=False):
