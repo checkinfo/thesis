@@ -82,7 +82,7 @@ def print_grad_norm(model):
 	for name, p in parameters:
 		param_norm = p.grad.detach().data.norm(2)
 		if not (param_norm < 20 and param_norm > -20):
-			print("norm clip needed: ", p.grad.detach().data, param_norm, name, p.size())
+			print("norm clip needed: ", param_norm, name, p.size())
 		total_norm += param_norm.item()**2
 	return total_norm
 

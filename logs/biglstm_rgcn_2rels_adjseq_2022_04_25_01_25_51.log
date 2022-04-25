@@ -1,0 +1,74 @@
+Namespace(adj_path='./data/concepts_graph_1931_233_3.npy', ann_embed_dim=128, ann_embed_num=89, ann_path=None, batch_size=1, dataset_type='RGCNSeqTimeDataset', dout=0.3, epochs=40, glstm_layers=1, gnn_layers=1, gpu=0, graph_attn=False, hidden_dim=128, inner_prod=False, input_dim=9, input_graph=True, label_cnt=3, lr=0.001, lstm_layers=1, market=None, mask_adj=True, mask_type='soft', model_type='BiGLSTM', normalize_adj=True, num_days=8, num_heads=1, print_inteval=500, rank_loss=False, relation_num=2, rsr_data_path=None, seed=10086, shuffle=True, side_info=False, sparse_adj_path='../data/icgraph_window_250_0.8/', stock_num=1931, test_mask_path='./data/test_mask_126_1931.npy', test_path='./data/test_126_1931_12.npy', top_stocks=5, train_mask_path='./data/train_mask_2305_1931.npy', train_path='./data/train_2305_1931_12.npy', use_adj=True)
+load 2305 train graphs successful!
+load 126 test graphs successful!
+4677
+BiGLSTM(
+  (input_to_hidden): Linear(in_features=9, out_features=128, bias=True)
+  (forward_cells): ModuleList(
+    (0): GLSTMCell(
+      (dropout): Dropout(p=0.3, inplace=False)
+      (Wh): Linear(in_features=128, out_features=640, bias=False)
+      (Wn): Linear(in_features=128, out_features=640, bias=False)
+      (Wt): Linear(in_features=128, out_features=640, bias=False)
+      (U): Linear(in_features=128, out_features=640, bias=False)
+      (V): Linear(in_features=128, out_features=640, bias=True)
+      (relu): LeakyReLU(negative_slope=0.01)
+      (gnn): ModuleList(
+        (0): RGCN(
+          (lin_rel): ModuleList(
+            (0): Linear(in_features=128, out_features=128, bias=True)
+            (1): Linear(in_features=128, out_features=128, bias=True)
+          )
+          (lin_root): ModuleList(
+            (0): Linear(in_features=128, out_features=128, bias=False)
+            (1): Linear(in_features=128, out_features=128, bias=False)
+          )
+        )
+      )
+    )
+  )
+  (backward_cells): ModuleList(
+    (0): GLSTMCell(
+      (dropout): Dropout(p=0.3, inplace=False)
+      (Wh): Linear(in_features=128, out_features=640, bias=False)
+      (Wn): Linear(in_features=128, out_features=640, bias=False)
+      (Wt): Linear(in_features=128, out_features=640, bias=False)
+      (U): Linear(in_features=128, out_features=640, bias=False)
+      (V): Linear(in_features=128, out_features=640, bias=True)
+      (relu): LeakyReLU(negative_slope=0.01)
+      (gnn): ModuleList(
+        (0): RGCN(
+          (lin_rel): ModuleList(
+            (0): Linear(in_features=128, out_features=128, bias=True)
+            (1): Linear(in_features=128, out_features=128, bias=True)
+          )
+          (lin_root): ModuleList(
+            (0): Linear(in_features=128, out_features=128, bias=False)
+            (1): Linear(in_features=128, out_features=128, bias=False)
+          )
+        )
+      )
+    )
+  )
+  (fc0): ModuleList(
+    (0): Linear(in_features=256, out_features=128, bias=True)
+  )
+  (w_out): Linear(in_features=128, out_features=1, bias=True)
+  (dropout): Dropout(p=0.3, inplace=False)
+)
+train 0, step: 0, loss: 4.81497958304828, grad_norm: 5.25894194229995, ic: 0.026913900202296143
+train 0, step: 500, loss: 0.8642548688300679, grad_norm: 0.02465001985061648, ic: 0.030358306442981584
+train 0, step: 1000, loss: 1.9482182556464887, grad_norm: 0.43860024797776387, ic: -0.013874524862735544
+train 0, step: 1500, loss: 0.9464780061141305, grad_norm: 0.02785839657097456, ic: 0.07499509459057382
+train 0, step: 2000, loss: 1.0014956030080093, grad_norm: 0.13156919610208695, ic: 0.025591212817375197
+Epoch 0: 2022-04-25 13:35:04.418030: train loss: 1.6494746041411175
+Eval step 0: eval loss: 0.8363911153393374
+Eval: 2022-04-25 13:35:35.449817: total loss: 1.0793401214920124, mse:4.823159501972148, ic :0.009393751497579832, sharpe5:10.075748128294943, irr5:295.6517333984375, ndcg5:0.8700396464129944, pnl5:2.791635036468506 
+train 1, step: 0, loss: 2.7686377740675403, grad_norm: 0.7385270099707584, ic: 0.026513442555286735
+train 1, step: 500, loss: 1.7463975045724514, grad_norm: 0.6480429162783147, ic: 0.1444486534967968
+train 1, step: 1000, loss: 0.8754151460244386, grad_norm: 0.14931291693892076, ic: 0.06054204785513011
+train 1, step: 1500, loss: 1.707994623293822, grad_norm: 0.178389460114162, ic: -0.0035408983602292013
+train 1, step: 2000, loss: 2.1697158203125, grad_norm: 0.828536904707793, ic: -0.007294928584121584
+Epoch 1: 2022-04-25 13:43:25.006017: train loss: 1.6467908903097008
+Eval step 0: eval loss: 0.8362617774054926
+Eval: 2022-04-25 13:43:56.443378: total loss: 1.07929828185228, mse:4.823162488091652, ic :0.011079452038805582, sharpe5:7.48252920538187, irr5:210.6926727294922, ndcg5:0.8613476783317536, pnl5:2.9230947494506836 

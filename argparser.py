@@ -41,8 +41,13 @@ def get_parser():
     parser.add_argument('--normalize_adj', dest='normalize_adj', action='store_true', default=False, help='whether to normalize adj first')
     parser.add_argument('--mask_adj', dest='mask_adj', action='store_true', default=False, help='whether to mask each days adj in dataset')
     parser.add_argument('--side_info', dest='side_info', action='store_true', default=False, help='whether to use side info type embed')
-    # rsr
+    
     parser.add_argument('--graph_attn', dest='graph_attn', action='store_true', default=False, help='whether to use graph attention')
+    parser.add_argument('--rank_loss', dest='rank_loss', action='store_true', default=False, help='whether to add rank loss to mse loss')
+   
+    # rsr
     parser.add_argument('--inner_prod', dest='inner_prod', action='store_true', default=False, help='whether to implicit version of Relational Stock Ranking')
+    parser.add_argument('--rsr_data_path', help='path of rsr(NASDAQ+NYSE) raw stock price')
+    parser.add_argument('--market', help='market name, NASDAQ or NYSE')
     
     return parser

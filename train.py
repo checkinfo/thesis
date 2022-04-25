@@ -137,7 +137,7 @@ def evaluate(model, valid_dataloader, criterion, device, print_inteval, input_gr
 		if mask_type == 'strict':
 			calc_metrics(performances, pred_dict, y_dict, mask, top_stocks=top_stocks, mask_type=mask_type)
 		
-	irr5 = sum(performances['irr5']) - 1 # 收益率，不算复利，每天都投入1……
+	irr5 = sum(performances['irr5']) # 收益率，不算复利，每天都投入1。每天的收益之和……
 	sharpe5 = (np.mean(performances['irr5'])/np.std(performances['irr5']))*15.87 #To annualize,	每日收益率的均值除以波动
 	ic = np.mean(performances['ic'])
 	ndcg5 = np.mean(performances['ndcg_top5'])
@@ -171,14 +171,15 @@ def calc_metrics(performances, prediction, ground_truth, mask, top_stocks=5.0, m
 		gt_top5 = set()  # set of top5 stocks
 
 		for k in range(1, prediction.shape[1] + 1):  # stocks
-			cur_rank = rank_gt[-1 * k]
+			cur_rank = rank_gt[-1 * k]  # true idx for kth stock
 			if mask_type=='soft' and mask[j][cur_rank] < 0.5:
 				continue
 			if len(gt_top5) < int(top_stocks):  # 5 by default
 				gt_top5.add(cur_rank)
 			else:
 				break
-		
+		#print("gt top5: ", gt_top5, [ground_truth[j][x] for x in gt_top5])
+
 		# ndcg top5: prediction top5
 		rank_pre = torch.argsort(prediction[j])
 		pre_top5 = set()
@@ -191,8 +192,12 @@ def calc_metrics(performances, prediction, ground_truth, mask, top_stocks=5.0, m
 				pre_top5.add(cur_rank)
 			else:
 				break
-
-		performances['ndcg_top5'].append(ndcg_score(np.array(list(gt_top5)).reshape(1,-1), np.array(list(pre_top5)).reshape(1,-1)))
+		#print("pred top5: ", pre_top5, [ground_truth[j][x] for x in pre_top5])
+		# print("gt:", ground_truth[j])
+		if top_stocks>1:
+			performances['ndcg_top5'].append(ndcg_score(np.array(list(gt_top5)).reshape(1,-1), np.array(list(pre_top5)).reshape(1,-1)))
+		else:
+			performances['ndcg_top5'].append(1.0)
 
         # back testing each day on top 5
 		real_ret_rat_top5 = 0

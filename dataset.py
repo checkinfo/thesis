@@ -1,7 +1,9 @@
+from email.mime import base
 import os
 import copy
 from typing import Callable, Optional, Tuple
 import torch
+import random
 import datetime
 import numpy as np
 import torch.nn.functional as F
@@ -33,6 +35,93 @@ class TimeDataset(Dataset):
 		return (self.data[idx:end_idx, :, self.args.label_cnt:], 
 				self.data[end_idx-1, :, :self.args.label_cnt], 
 				self.mask[min(end_idx, len(self.data)-1), :], 
+				torch.Tensor([idx]))
+
+
+
+class NASDAQTimeDataset(Dataset):
+	def __init__(self, data_path, mask_path, dataset_type, args) -> None:
+		super(NASDAQTimeDataset, self).__init__()
+		self.seq_len = args.num_days
+		self.dataset_type = dataset_type
+		self.steps = 1
+
+		data_path = args.rsr_data_path  #"../Temporal_Relational_Stock_Ranking/data/2013-01-01"  # p
+		market = args.market  # m
+		tickers_fname = market + "_tickers_qualify_dr-0.98_min-5_smooth.csv"  # t
+
+		tickers = np.genfromtxt(os.path.join(data_path, '..', tickers_fname), \
+			dtype=str, delimiter='\t', skip_header=False)
+		print('#tickers selected:', len(tickers))  # 1026
+
+		self.eod_data, self.mask_data, self.gt_data, self.price_data = \
+					self.load_EOD_data(data_path, market, tickers, steps=1)
+		# [stocks, days, input_dim]
+		print(self.eod_data.shape, self.mask_data.shape, self.gt_data.shape, self.price_data.shape)
+	
+	def load_EOD_data(self, data_path, market_name, tickers, steps=1):
+		# tickers: stocks
+		eod_data = []
+		masks = []
+		ground_truth = []
+		base_price = []
+		for index, ticker in enumerate(tickers):
+			single_EOD = np.genfromtxt(
+				os.path.join(data_path, market_name + '_' + ticker + '_1.csv'),
+				dtype=np.float32, delimiter=',', skip_header=False
+			)
+			if market_name == 'NASDAQ':
+				# remove the last day since lots of missing data
+				single_EOD = single_EOD[:-1, :]
+			if index == 0:
+				print('single EOD data shape:', single_EOD.shape)
+				eod_data = np.zeros([len(tickers), single_EOD.shape[0],
+									single_EOD.shape[1] - 1], dtype=np.float32)
+				masks = np.ones([len(tickers), single_EOD.shape[0]],
+								dtype=np.float32)
+				ground_truth = np.zeros([len(tickers), single_EOD.shape[0]],
+										dtype=np.float32)
+				base_price = np.zeros([len(tickers), single_EOD.shape[0]],
+									dtype=np.float32)
+			for row in range(single_EOD.shape[0]):
+				if abs(single_EOD[row][-1] + 1234) < 1e-8:
+					masks[index][row] = 0.0
+				elif row > steps - 1 and abs(single_EOD[row - steps][-1] + 1234) \
+						> 1e-8:
+					ground_truth[index][row] = \
+						(single_EOD[row][-1] - single_EOD[row - steps][-1]) / \
+						single_EOD[row - steps][-1]
+				for col in range(single_EOD.shape[1]):
+					if abs(single_EOD[row][col] + 1234) < 1e-8:
+						single_EOD[row][col] = 1.1
+			eod_data[index, :, :] = single_EOD[:, 1:]
+			base_price[index, :] = single_EOD[:, -1]
+		return eod_data, masks, ground_truth, base_price
+
+	def get_batch(self, offset=None):
+		if offset is None:
+			offset = random.randrange(0, self.valid_index)
+		
+		mask_batch = self.mask_data[:, offset: offset + self.seq_len + self.steps]
+		mask_batch = np.min(mask_batch, axis=1)
+		return self.eod_data[:, offset:offset + self.seq_len, :], \
+               	mask_batch, \
+            	np.expand_dims(self.price_data[:, offset + self.seq_len - 1], axis=1),\
+                np.expand_dims(self.gt_data[:, offset + self.seq_len + self.steps - 1], axis=1)
+
+	def __len__(self) -> int:
+		return 756 if self.dataset_type=='train' else 237
+		# no need to remove the last day
+	
+	def __getitem__(self, idx) -> Tuple[torch.Tensor]:  # return (x, y, mask, ann placeholder)
+		if self.dataset_type != 'train':
+			idx += 1008  # 756+252+237
+		eod, mask, base_price, ground_truth = self.get_batch(idx)
+		eod = np.transpose(eod, (1,0,2))  # [num_days, num_stocks, input_dim]
+
+		return (torch.from_numpy(eod),\
+				torch.from_numpy(ground_truth),\
+				torch.from_numpy(mask), \
 				torch.Tensor([idx]))
 
 
