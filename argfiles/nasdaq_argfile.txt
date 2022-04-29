@@ -8,8 +8,8 @@
 --label_cnt=1
 --input_dim=5
 --sparse_adj_path=../data/icgraph_window_250_0.8/
---model_type=BiGLSTM
---dataset_type=NASDAQTimeDataset
+--model_type=RGCNModel
+--dataset_type=NASDAQAdjSeqTimeDataset
 --relation_num=1
 --seed=10086
 --num_days=8
@@ -23,6 +23,7 @@
 --print_inteval=100
 --mask_type=soft
 --shuffle
+--input_graph
 --mask_adj
 --use_adj
 --normalize_adj

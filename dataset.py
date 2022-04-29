@@ -110,12 +110,13 @@ class NASDAQTimeDataset(Dataset):
                 np.expand_dims(self.gt_data[:, offset + self.seq_len + self.steps - 1], axis=1)
 
 	def __len__(self) -> int:
-		return 756 if self.dataset_type=='train' else 237
-		# no need to remove the last day
+		days = 756 if self.dataset_type=='train' else 237
+		return days - self.seq_len  # 和RSR的代码对齐
 	
 	def __getitem__(self, idx) -> Tuple[torch.Tensor]:  # return (x, y, mask, ann placeholder)
 		if self.dataset_type != 'train':
 			idx += 1008  # 756+252+237
+		if idx + self.seq_len >= 1245: print(idx, idx-1008)
 		eod, mask, base_price, ground_truth = self.get_batch(idx)
 		eod = np.transpose(eod, (1,0,2))  # [num_days, num_stocks, input_dim]
 
@@ -123,6 +124,88 @@ class NASDAQTimeDataset(Dataset):
 				torch.from_numpy(ground_truth),\
 				torch.from_numpy(mask), \
 				torch.Tensor([idx]))
+
+
+class NASDAQAdjTimeDataset(NASDAQTimeDataset):
+	def __init__(self, data_path, mask_path, dataset_type, args) -> None:
+		super(NASDAQAdjTimeDataset, self).__init__( data_path, mask_path, dataset_type, args)
+		self.args = args
+		self.days = args.num_days
+		self.adj = torch.from_numpy(np.load(args.adj_path).astype('float32'))
+
+	def __len__(self) -> int:
+		return super().__len__()
+	
+	def __getitem__(self, idx) -> Tuple[torch.Tensor]:
+		# returns (x, y, mask, adj, end_idx, ann placeholder)
+		if self.dataset_type != 'train':
+			idx += 1008  # 756+252+237
+		if idx + self.seq_len >= 1245: print(idx, idx-1008)
+		eod, mask, base_price, ground_truth = self.get_batch(idx)
+		eod = np.transpose(eod, (1,0,2))  # [num_days, num_stocks, input_dim]
+
+		end_idx = idx + self.days
+		# TODO: cur_mask==mask?
+		cur_mask = torch.from_numpy(self.mask_data[:, end_idx-1])  # mask not shifted
+		if self.args.mask_adj:
+			cur_adj = torch.mul(self.adj, cur_mask.reshape(-1, 1))  # broadcast: [n*n] * [n*1] -> [n*n]
+		else:
+			cur_adj = self.adj
+
+		if self.args.use_adj:
+			if self.args.normalize_adj:
+				cur_adj = normalize(cur_adj)
+		else:
+			cur_adj = cur_adj.nonzero().t()
+
+		return (torch.from_numpy(eod),\
+				torch.from_numpy(ground_truth),\
+				torch.from_numpy(mask), \
+				cur_adj.float() if self.args.use_adj else cur_adj.long(),\
+				torch.LongTensor([cur_adj.size(1)]),  # meaningless
+				torch.LongTensor([0]))  # meaningless
+
+
+class NASDAQAdjSeqTimeDataset(NASDAQTimeDataset):
+	def __init__(self, data_path, mask_path, dataset_type, args) -> None:
+		super(NASDAQAdjSeqTimeDataset, self).__init__( data_path, mask_path, dataset_type, args)
+		self.args = args
+		self.days = args.num_days
+		self.adj = torch.from_numpy(np.load(args.adj_path).astype('float32'))
+
+	def __len__(self) -> int:
+		return super().__len__()
+	
+	def __getitem__(self, idx) -> Tuple[torch.Tensor]:
+		# returns (x, y, mask, adj, end_idx, ann placeholder)
+		if self.dataset_type != 'train':
+			idx += 1008  # 756+252+237
+		if idx + self.seq_len >= 1245: print(idx, idx-1008)
+		eod, mask, base_price, ground_truth = self.get_batch(idx)
+		eod = np.transpose(eod, (1,0,2))  # [num_days, num_stocks, input_dim]
+
+		end_idx = idx + self.days
+		adjs, edgenum = [], []
+		for i in range(idx, end_idx):  # [idx, end_idx-1]
+			cur_mask = torch.from_numpy(self.mask_data[:, i])  # mask not shifted
+			cur_adj = torch.mul(self.adj, cur_mask.reshape(-1, 1)) \
+				if self.args.mask_adj else self.adj # broadcast: [n*n] * [n*1] -> [n*n]
+			
+			if self.args.use_adj:
+				if self.args.normalize_adj:
+					cur_adj = normalize(cur_adj)
+			else:
+				cur_adj = cur_adj.nonzero().t()
+				edgenum.append(cur_adj.size(1))
+
+			adjs.append(cur_adj)
+
+		return (torch.from_numpy(eod),\
+				torch.from_numpy(ground_truth),\
+				torch.from_numpy(mask), \
+				torch.stack(adjs, dim=0).float(), \
+				torch.LongTensor([cur_adj.size(1)]),  # meaningless
+				torch.LongTensor([0]))  # meaningless
 
 
 class AnnTimeDataset(TimeDataset):
