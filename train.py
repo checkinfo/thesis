@@ -15,12 +15,15 @@ from utils import *
 def weighted_mse_loss(input, target, weight):
 	# reduction: Reduction.SUM_BY_NONZERO_WEIGHTS
     # return torch.mean(weight * (input - target) ** 2)  ##EDIT HERE make it div by trch.sum(mask)
-	print(torch.mean(weight * (input - target) ** 2), (weight * (input - target) ** 2) / torch.sum(weight))
-	return (weight * (input - target) ** 2) / torch.sum(weight)
+	# print(torch.mean(weight * (input - target) ** 2), torch.sum(weight * (input - target) ** 2) / torch.sum(weight))
+	return torch.sum(weight * (input - target) ** 2) / torch.sum(weight)
 
 def trr_loss_mse_rank(pred, ground_truth, mask, alpha, num_stocks, device):
 	# pred == return ratio 
     return_ratio = pred
+    if len(ground_truth.size()) == 1:
+        ground_truth = ground_truth.unsqueeze(-1)
+    # print(pred.size(), ground_truth.size(), mask.size())
     reg_loss = weighted_mse_loss(return_ratio, ground_truth, mask)
     all_ones = torch.ones((num_stocks,1)).to(device)
     pre_pw_dif =  (torch.matmul(return_ratio, torch.transpose(all_ones, 0, 1)) 
@@ -35,12 +38,12 @@ def trr_loss_mse_rank(pred, ground_truth, mask, alpha, num_stocks, device):
             F.relu(
                 ((pre_pw_dif*gt_pw_dif)*mask_pw)))
     loss = reg_loss + alpha*rank_loss
-    # print(return_ratio)
+    # print(loss, rank_loss)
     del mask_pw, gt_pw_dif, pre_pw_dif, all_ones
     return loss, reg_loss, rank_loss
 
 
-def train(epoch, model, train_dataloader, criterion, optimizer, device, print_inteval, input_graph=True, mask_type='soft'):
+def train(epoch, model, train_dataloader, criterion, optimizer, device, print_inteval, input_graph=True, mask_type='soft', num_stocks=1931, rank_loss=False):
 	model.train()
 	total_steps, running_loss = 0, 0.0
 
@@ -56,8 +59,12 @@ def train(epoch, model, train_dataloader, criterion, optimizer, device, print_in
 			y_pred = model(x=x_train.to(device), side_info=side_info.to(device))  # [batch_size, num_stocks, 1]
 
 		# predict percentage change
-		if mask_type == 'strict':
-			loss = criterion(y_pred.squeeze(), y_train[:, : ,-1].flatten().to(device))
+		#if mask_type == 'strict':
+		#	loss = criterion(y_pred.squeeze(), y_train[:, : ,-1].flatten().to(device))
+		#else:
+		if rank_loss:
+			# [num_stocks, 1], [num_stockks] [num_stocks, 1]
+			loss, reg_l, rank_l = trr_loss_mse_rank(y_pred.squeeze(0), y_train[:,:, -1].squeeze(0).to(device), mask.float().to(device), 5, num_stocks, device)
 		else:
 			mse_loss = criterion(y_pred.squeeze(), y_train[:, : ,-1].squeeze().to(device))
 			mse_loss = (mse_loss*mask.float().to(device)).sum()
@@ -87,6 +94,8 @@ def train(epoch, model, train_dataloader, criterion, optimizer, device, print_in
 					ics.append(ic)
 			else:
 				ics = [0]
+			if rank_loss:
+				print(reg_l.item(), rank_l.item())
 			print("train {}, step: {}, loss: {}, grad_norm: {}, ic: {}".format(epoch, i, loss.item(), grad_norm, np.mean(ics)))
 
 	return running_loss / total_steps
@@ -113,13 +122,13 @@ def evaluate(model, valid_dataloader, criterion, device, print_inteval, input_gr
 				if mask_type=='strict': day_idx=side_info
 			
 			# predict percentage change
-			if mask_type == 'strict':
-				loss = criterion(y_pred.squeeze(), y_valid[:, :, -1].squeeze().to(device))
-			else:
-				mse_loss = criterion(y_pred.squeeze(), y_valid[:, : ,-1].squeeze().to(device))
-				mse_loss = (mse_loss*mask.float().to(device)).sum()
-				mse_loss = mse_loss / mask.sum()
-				loss = mse_loss
+			#if mask_type == 'strict':
+			#	loss = criterion(y_pred.squeeze(), y_valid[:, :, -1].squeeze().to(device))
+			#else:
+			mse_loss = criterion(y_pred.squeeze(), y_valid[:, : ,-1].squeeze().to(device))
+			mse_loss = (mse_loss*mask.float().to(device)).sum()
+			mse_loss = mse_loss / mask.sum()
+			loss = mse_loss
 
 			if i%print_inteval == 0:
 				print('Eval step {}: eval loss: {}'.format(i, loss.item()))
@@ -146,7 +155,7 @@ def evaluate(model, valid_dataloader, criterion, device, print_inteval, input_gr
 	# pnl = avg profit / avg loss, 收益率列表里面，正的求个平均，负的求个平均
 	# appt = prob of profit * avg profit - prob of loss*avg loss
 	return running_loss / total_steps, mse, ic, sharpe5, irr5, ndcg5, pnl5
-
+ 
 			
 def calc_metrics(performances, prediction, ground_truth, mask, top_stocks=5.0, mask_type='soft'):
 	# [batch_size, num_stocks]

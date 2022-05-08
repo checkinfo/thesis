@@ -43,10 +43,10 @@ if __name__ == "__main__":
 	print(os.getpid())
 	print(cur_model)
 
-	max_ic = 0.08
+	max_ic = 0.19
 	for epoch in range(args.epochs):
 		train_loss = train(epoch, cur_model, train_dataloader, criterion, optimzer, \
-			device, args.print_inteval, args.input_graph, args.mask_type)
+			device, args.print_inteval, args.input_graph, args.mask_type, args.stock_num, args.rank_loss)
 		print('Epoch {}: {}: train loss: {}'.format(epoch, datetime.datetime.now(), train_loss))
 		valid_loss, mse, ic, sharpe5, irr5, ndcg5, pnl5 = evaluate(cur_model, test_dataloader, criterion, device, \
 			args.print_inteval, args.input_graph, args.mask_type, top_stocks=args.top_stocks)

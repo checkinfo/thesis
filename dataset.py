@@ -228,7 +228,7 @@ class MaskedTimeDataset(TimeDataset):
 	def __init__(self, data_path, mask_path, dataset_type, args) -> None:
 		super(MaskedTimeDataset, self).__init__(data_path, mask_path, dataset_type, args)
 
-		index = np.argwhere(self.mask>0)
+		index = np.argwhere(self.mask>=0)  # no mask
 		self.idx2pair = {i:index[i] for i in range(index.shape[0]) \
             if index[i][0] < self.data.shape[0]-self.days+1}  # no need to remove the last day
 		self.idx_arr = list(self.idx2pair.keys())
@@ -412,7 +412,7 @@ class SparseAdjTimeDataset(TimeDataset):
 		# returns (x, y, mask, adj, end_idx, ann placeholder)
 		end_idx = idx + self.days
 		cur_mask = self.mask[end_idx-1, :]  # mask not shifted
-		cur_adj = to_dense_adj(self.adj_list[end_idx-1], max_num_nodes=self.args.stock_num).squeeze(0),
+		cur_adj = to_dense_adj(self.adj_list[end_idx-1], max_num_nodes=self.args.stock_num).squeeze(0)
 		if self.args.mask_adj:
 			cur_adj = torch.mul(cur_adj, cur_mask.reshape(-1, 1))  # broadcast: [n*n] * [n*1] -> [n*n]
 
@@ -540,6 +540,41 @@ class RGCNTimeDataset(SparseAdjSeqTimeDataset):
 				self.mask[min(end_idx, len(self.data)-1), :],
 				cur_adj.float(),
 				torch.LongTensor([cur_adj.size(1)]),  # meaningless
+				torch.LongTensor([0]))  # meaningless
+
+
+class RGCNAdjTimeDataset(SparseAdjSeqTimeDataset):
+	def __init__(self, data_path, mask_path, dataset_type, args) -> None:
+		super().__init__(data_path, mask_path, dataset_type, args)
+		self.adj = torch.from_numpy(np.load(args.adj_path).astype('float32'))
+
+	def __len__(self) -> int:
+		return super().__len__()
+
+	def __getitem__(self, idx ) -> Tuple[torch.Tensor]:
+		# returns (x, y, mask, adjs, end_idxs)
+		# adjs shape: [num_days, rel_nums, nodes, nodes]
+		end_idx = idx + self.days
+		adjs, edgenum = [], []
+		cur_mask = self.mask[end_idx-1, :]  # mask not shifted
+		for i in range(idx, end_idx):  # [idx, end_idx-1]
+			cur_adj1 = torch.mul(self.adj, cur_mask.reshape(-1, 1)) \
+				if self.args.mask_adj else self.adj # broadcast: [n*n] * [n*1] -> [n*n]
+			cur_adj2 = torch.mul(to_dense_adj(self.adj_list[i], max_num_nodes=self.args.stock_num).squeeze(0), cur_mask.reshape(-1, 1)) \
+				if self.args.mask_adj else self.adj # broadcast: [n*n] * [n*1] -> [n*n]
+			
+			if self.args.use_adj and self.args.normalize_adj:
+				cur_adj1, cur_adj2 = normalize(cur_adj1), normalize(cur_adj2)
+			else:
+				raise NotImplementedError("need to set --use_adj  and --normalize_adj in argfile")
+			adjs.append(torch.stack((cur_adj1, cur_adj2), dim=0))
+			
+		# return stacked adjs
+		return (self.data[idx:end_idx, :, self.args.label_cnt:], \
+				self.data[end_idx-1, :, :self.args.label_cnt], \
+				self.mask[min(end_idx, len(self.data)-1), :], \
+				torch.stack(adjs, dim=0).float(), \
+				torch.LongTensor([1931]),  # meaningless
 				torch.LongTensor([0]))  # meaningless
 
 

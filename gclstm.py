@@ -166,6 +166,7 @@ class RGCN(nn.Module):
             self.attention = nn.ModuleList([GraphAttentionLayer(in_features, in_features, dout, heads)] * relation_num)
         self.lin_rel = nn.ModuleList([nn.Linear(in_features, out_features, bias=True)]*relation_num)
         self.lin_root = nn.ModuleList([nn.Linear(in_features, out_features, bias=False)]*relation_num)
+        self.lin_gate = nn.Linear(out_features*relation_num, out_features*relation_num)
         # self.lin_out = nn.Linear(out_features*relation_num, out_features)
 
     def gcn(self, relation, x, adj):
@@ -188,9 +189,19 @@ class RGCN(nn.Module):
         transform = []
         for r in range(self.relation_num):
             transform.append(self.gcn(r, x, adjs[r]))
+        # (node, relation, hidden)
+        transform = torch.stack(transform, 1).squeeze(2)
         # (node, relation, hidden) -> (node, relation*hidden) -> (node, hidden)
         # return self.lin_out(torch.stack(transform, 1).view(x.size(0), -1)) 
-        return torch.sum(torch.stack(transform, 1), 1)
+        # return torch.sum(transform, 1)
+        # gating: [node, relation*hidden] -> [node, relation, hidden]
+        if self.relation_num == 1:
+            return torch.sum(transform, 1)
+        else:
+            gate = self.lin_gate(transform.view(x.size(0), -1)).view(x.size(0), self.relation_num, -1)
+            gate = F.softmax(gate, 1)
+            return torch.sum(torch.mul(gate, transform), 1)
+
 
 
 class GLSTMCell(nn.Module):

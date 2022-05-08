@@ -350,8 +350,15 @@ class ReRaLSTM(nn.Module):
 		self.input_size, self.hidden_size = args.input_dim, args.hidden_dim
 		self.rnn1 = nn.LSTM(args.input_dim, args.hidden_dim, args.lstm_layers, dropout=args.dout, bidirectional=True, batch_first=True)
 
+		# relation data
+		self.all_one = nn.Parameter(torch.ones((args.stock_num, 1)))
+		self.rel_encoding, self.rel_mask = self.load_relation_data(args.adj_path)
+		self.rel_encoding, self.rel_mask = nn.Parameter(self.rel_encoding, requires_grad=False), nn.Parameter(self.rel_mask, requires_grad=False)
+		print('relation encoding shape:', self.rel_encoding.shape, self.rel_encoding.dtype)
+		print('relation mask shape:', self.rel_mask.shape, self.rel_mask.dtype)
+
 		self.fc0 = nn.Linear(2*args.hidden_dim, args.hidden_dim)
-		self.fc1 = nn.Linear(824, 1)
+		self.fc1 = nn.Linear(self.rel_encoding.size(-1), 1)
 		self.fc2 = nn.Linear(args.hidden_dim, 1)
 		self.fc3 = nn.Linear(args.hidden_dim, 1)
 
@@ -359,15 +366,7 @@ class ReRaLSTM(nn.Module):
 
 		self.relu = nn.LeakyReLU()
 		self.dropout = nn.Dropout(args.dout)
-		self.seq_len = args.num_days
-
-		# relation data
-		self.all_one = nn.Parameter(torch.ones((args.stock_num, 1)))
-		self.rel_encoding, self.rel_mask = self.load_relation_data(args.adj_path)
-		self.rel_encoding, self.rel_mask = nn.Parameter(self.rel_encoding, requires_grad=False), nn.Parameter(self.rel_mask, requires_grad=False)
-
-		print('relation encoding shape:', self.rel_encoding.shape, self.rel_encoding.dtype)
-		print('relation mask shape:', self.rel_mask.shape, self.rel_mask.dtype)
+		self.seq_len = args.num_days	
 	
 	def load_relation_data(self, relation_file):
 		relation_encoding = np.load(relation_file)
@@ -375,9 +374,9 @@ class ReRaLSTM(nn.Module):
 		mask_flags = np.equal(np.zeros(rel_shape, dtype=int),
 							np.sum(relation_encoding, axis=2))
 		mask = np.where(mask_flags, np.ones(rel_shape) * -1e9, np.zeros(rel_shape))
-		return torch.from_numpy(relation_encoding), torch.from_numpy(mask).float()
+		return torch.from_numpy(relation_encoding).float(), torch.from_numpy(mask).float()
 
-	def forward(self, x, side_info=None):
+	def forward(self,  x, side_info=None):
 		batch_size, seq_len, num_stocks, num_features = x.size()
 
 		new_x = x.permute((0,2,1,3)).reshape((batch_size*num_stocks, seq_len, num_features))
