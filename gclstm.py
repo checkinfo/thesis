@@ -166,7 +166,9 @@ class RGCN(nn.Module):
             self.attention = nn.ModuleList([GraphAttentionLayer(in_features, in_features, dout, heads)] * relation_num)
         self.lin_rel = nn.ModuleList([nn.Linear(in_features, out_features, bias=True)]*relation_num)
         self.lin_root = nn.ModuleList([nn.Linear(in_features, out_features, bias=False)]*relation_num)
-        self.lin_gate = nn.Linear(out_features*relation_num, out_features*relation_num)
+        # print("relation num: ", relation_num)
+        if relation_num > 1:
+            self.lin_gate = nn.Linear(out_features*relation_num, out_features*relation_num)
         # self.lin_out = nn.Linear(out_features*relation_num, out_features)
 
     def gcn(self, relation, x, adj):

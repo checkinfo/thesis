@@ -238,8 +238,8 @@ def save_model(epoch, model, optimizer, ic, args):
 def load_model(model_path, model, optimizer):
 	saved_model = torch.load(model_path, map_location='cpu')
 	start_epoch = saved_model['epoch']
-	model.load_state_dict(saved_model['state_dict'])
-	optimizer.load_state_dict(saved_model['optimizer'])
+	model.load_state_dict(saved_model['state_dict'],strict=False)
+	#optimizer.load_state_dict(saved_model['optimizer'], strict=False)
 	# optimizer_to(optimizer, device)
 	return start_epoch, model, optimizer
 

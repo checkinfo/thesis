@@ -9,9 +9,9 @@ from torch.utils.data import DataLoader, TensorDataset
 import model
 import dataset
 from utils import set_seed, seed_worker
-from train import train, evaluate, save_model
+from train import train, save_model
+from eval import evaluate
 from argparser import get_parser
-
 
 if __name__ == "__main__":
 	parser = get_parser()
@@ -43,15 +43,20 @@ if __name__ == "__main__":
 	print(os.getpid())
 	print(cur_model)
 
-	max_ic = 0.19
+	max_ic = 0.18
 	for epoch in range(args.epochs):
 		train_loss = train(epoch, cur_model, train_dataloader, criterion, optimzer, \
 			device, args.print_inteval, args.input_graph, args.mask_type, args.stock_num, args.rank_loss)
 		print('Epoch {}: {}: train loss: {}'.format(epoch, datetime.datetime.now(), train_loss))
-		valid_loss, mse, ic, sharpe5, irr5, ndcg5, pnl5 = evaluate(cur_model, test_dataloader, criterion, device, \
-			args.print_inteval, args.input_graph, args.mask_type, top_stocks=args.top_stocks)
-		print('Eval: {}: total loss: {}, mse:{}, ic :{}, sharpe5:{}, irr5:{}, ndcg5:{}, pnl5:{} '\
-			.format(datetime.datetime.now(), valid_loss, mse, ic, sharpe5, irr5, ndcg5, pnl5))
+		
+		valid_loss, mse, ic, sharpe5, sharpe5_real, irr5, irr5_real, ndcg5, pnl5 = evaluate(cur_model, test_dataloader, criterion, device, \
+			args.print_inteval, args.num_days, args.input_graph, args.mask_type, top_stocks=args.top_stocks)
+		print('Eval: {}: total loss: {}, mse:{}, ic :{}, sharpe5:{}, sharpe5_real:{}, irr5:{}, irr5_real:{}, ndcg5:{}, pnl5:{} '\
+			.format(datetime.datetime.now(), valid_loss, mse, ic, sharpe5, sharpe5_real, irr5, irr5_real, ndcg5, pnl5))
+		#valid_loss, mse, ic, sharpe5, irr5, ndcg5, pnl5 = evaluate(cur_model, test_dataloader, criterion, device, \
+		#	args.print_inteval, args.input_graph, args.mask_type, top_stocks=args.top_stocks)
+		#print('Eval: {}: total loss: {}, mse:{}, ic :{}, sharpe5:{}, irr5:{}, ndcg5:{}, pnl5:{} '\
+		#	.format(datetime.datetime.now(), valid_loss, mse, ic, sharpe5, irr5, ndcg5, pnl5))
 
 		if ic > max_ic:
 			max_ic = max(ic, max_ic)

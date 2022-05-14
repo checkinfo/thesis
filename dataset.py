@@ -337,6 +337,8 @@ class AdjSeqTimeDataset(AdjTimeDataset):
 			return (self.data[idx:end_idx, :, self.args.label_cnt:], \
 					self.data[end_idx-1, :, :self.args.label_cnt], \
 					self.mask[min(end_idx, len(self.data)-1), :], \
+						# TODO 
+					# self.mask[end_idx-1, :] * self.mask[min(end_idx, len(self.data)-1), :], \
 					torch.stack(adjs, dim=0).float(), \
 					torch.LongTensor([1931]),  # meaningless
 					torch.LongTensor([0]))  # meaningless
@@ -561,7 +563,7 @@ class RGCNAdjTimeDataset(SparseAdjSeqTimeDataset):
 			cur_adj1 = torch.mul(self.adj, cur_mask.reshape(-1, 1)) \
 				if self.args.mask_adj else self.adj # broadcast: [n*n] * [n*1] -> [n*n]
 			cur_adj2 = torch.mul(to_dense_adj(self.adj_list[i], max_num_nodes=self.args.stock_num).squeeze(0), cur_mask.reshape(-1, 1)) \
-				if self.args.mask_adj else self.adj # broadcast: [n*n] * [n*1] -> [n*n]
+				if self.args.mask_adj else to_dense_adj(self.adj_list[i], max_num_nodes=self.args.stock_num).squeeze(0) # broadcast: [n*n] * [n*1] -> [n*n]
 			
 			if self.args.use_adj and self.args.normalize_adj:
 				cur_adj1, cur_adj2 = normalize(cur_adj1), normalize(cur_adj2)
@@ -596,7 +598,7 @@ class RGCNSeqTimeDataset(SparseAdjSeqTimeDataset):
 			cur_adj1 = torch.mul(self.adj, cur_mask.reshape(-1, 1)) \
 				if self.args.mask_adj else self.adj # broadcast: [n*n] * [n*1] -> [n*n]
 			cur_adj2 = torch.mul(to_dense_adj(self.adj_list[i], max_num_nodes=self.args.stock_num).squeeze(0), cur_mask.reshape(-1, 1)) \
-				if self.args.mask_adj else self.adj # broadcast: [n*n] * [n*1] -> [n*n]
+				if self.args.mask_adj else to_dense_adj(self.adj_list[i], max_num_nodes=self.args.stock_num).squeeze(0) # broadcast: [n*n] * [n*1] -> [n*n]
 			
 			if self.args.use_adj and self.args.normalize_adj:
 				cur_adj1, cur_adj2 = normalize(cur_adj1), normalize(cur_adj2)
@@ -608,6 +610,8 @@ class RGCNSeqTimeDataset(SparseAdjSeqTimeDataset):
 		return (self.data[idx:end_idx, :, self.args.label_cnt:], \
 				self.data[end_idx-1, :, :self.args.label_cnt], \
 				self.mask[min(end_idx, len(self.data)-1), :], \
+					# TODO
+				# self.mask[end_idx-1, :] * self.mask[min(end_idx, len(self.data)-1), :], \
 				torch.stack(adjs, dim=0).float(), \
 				torch.LongTensor([1931]),  # meaningless
 				torch.LongTensor([0]))  # meaningless
